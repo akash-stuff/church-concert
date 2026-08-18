@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My bookings</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap stack">
+        <div class="card card--tint card--split">
+          <div>
+            <p class="eyebrow">Your dashboard</p>
+            <h1 data-greeting style="margin-bottom: 0.35rem">Welcome back</h1>
+            <p class="muted" style="margin: 0">
+              Your seats, your WhatsApp status and your details, all in one place.
+            </p>
+          </div>
+          <figure class="card__art">
+            <img src="/assets/crowd.svg" alt="" aria-hidden="true" width="420" height="240" />
+          </figure>
+        </div>
+
+        <div class="notice" data-notice></div>
+
+        <!-- Concert booking -->
+        <div class="card card--flush">
+          <div class="card__head">
+            <h2>My bookings</h2>
+            <span data-booking-pill></span>
+          </div>
+          <div class="card__body" data-booking-body>
+            <div class="skeleton" style="height: 6rem"></div>
+          </div>
+        </div>
+
+        <div class="grid grid--2">
+          <!-- WhatsApp -->
+          <div class="card card--flush">
+            <div class="card__head">
+              <h2>WhatsApp</h2>
+              <span data-whatsapp-pill></span>
+            </div>
+            <div class="card__body" data-whatsapp-body></div>
+          </div>
+
+          <!-- Profile -->
+          <div class="card card--flush">
+            <div class="card__head"><h2>Profile</h2></div>
+            <div class="card__body">
+              <dl class="detail" data-profile></dl>
+              <div class="btn-row" style="margin-top: 1.25rem">
+                <button class="btn btn--ghost btn--small" type="button" data-toggle-profile>
+                  Update my details
+                </button>
+              </div>
+
+              <form id="profile-form" hidden style="margin-top: 1.5rem">
+                <div class="field">
+                  <label for="full_name">Full name</label>
+                  <input id="full_name" name="full_name" type="text" required />
+                  <span class="field__error" data-error-for="full_name"></span>
+                </div>
+                <div class="field">
+                  <label for="mobile_number">Mobile number</label>
+                  <input id="mobile_number" name="mobile_number" type="tel" required />
+                  <span class="field__error" data-error-for="mobile_number"></span>
+                </div>
+                <div class="field">
+                  <label for="whatsapp_number">WhatsApp number</label>
+                  <input id="whatsapp_number" name="whatsapp_number" type="tel" required />
+                  <p class="field__hint">
+                    Changing this means verifying the new number before you can book.
+                  </p>
+                  <span class="field__error" data-error-for="whatsapp_number"></span>
+                </div>
+                <div class="field">
+                  <label for="address">Address</label>
+                  <textarea id="address" name="address" required></textarea>
+                  <span class="field__error" data-error-for="address"></span>
+                </div>
+                <div class="field">
+                  <label for="emergency_contact">Emergency contact number</label>
+                  <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                  <span class="field__error" data-error-for="emergency_contact"></span>
+                </div>
+                <button class="btn btn--primary btn--small" type="submit">Save changes</button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account -->
+        <div class="card card--flush">
+          <div class="card__head"><h2>Account</h2></div>
+          <div class="card__body">
+            <form id="password-form" style="max-width: 420px">
+              <div class="field">
+                <label for="current_password">Current password</label>
+                <input
+                  id="current_password"
+                  name="current_password"
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                />
+                <span class="field__error" data-error-for="current_password"></span>
+              </div>
+              <div class="field">
+                <label for="new_password">New password</label>
+                <input
+                  id="new_password"
+                  name="new_password"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                />
+                <p class="field__hint">
+                  At least 10 characters, with an uppercase letter, a lowercase letter and a number.
+                </p>
+                <span class="field__error" data-error-for="new_password"></span>
+              </div>
+              <div class="btn-row">
+                <button class="btn btn--ghost btn--small" type="submit">Change password</button>
+                <button class="btn btn--ghost btn--small" type="button" data-signout>Sign out</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · <a href="/concert.html">Concert details</a></div>
+    </footer>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/dashboard.js"></script>
+  </body>
+</html>

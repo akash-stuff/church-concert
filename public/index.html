@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Night of Worship — reserve a seat</title>
+    <meta
+      name="description"
+      content="Free seat reservation for the church concert. Register, verify your WhatsApp number, and claim one seat."
+    />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero__inner">
+        <div class="hero__grid">
+          <div class="hero__copy">
+            <p class="eyebrow">Christmas Eve · Free admission</p>
+            <h1>An evening of choir, strings and <em>congregational singing</em></h1>
+            <p class="hero__lede">
+              Every seat is free, and every seat is reserved in advance so nobody is turned away at
+              the door. One person, one seat.
+            </p>
+
+            <ul class="hero__meta" data-hero-meta>
+              <li class="skeleton" style="width: 14rem"></li>
+            </ul>
+
+            <div class="board" data-board>
+              <div class="board__count" data-board-count>—</div>
+              <div class="board__label">
+                <strong>seats left</strong> of <span data-board-total>—</span>
+              </div>
+            </div>
+
+            <div class="btn-row">
+              <a class="btn btn--primary" href="/register.html" data-primary-cta>Reserve a seat</a>
+              <a class="btn btn--ghost" href="/concert.html">Concert details</a>
+            </div>
+          </div>
+
+          <figure class="hero__art">
+            <img
+              src="/assets/hero-worship.svg"
+              alt="A congregation with raised hands in front of a lit cross"
+              width="800"
+              height="560"
+            />
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <main>
+      <div class="wrap stack">
+        <div class="notice" data-notice></div>
+
+        <div data-concerts-heading hidden>
+          <h2 style="margin-bottom: 0.25rem">Concerts coming up</h2>
+          <p class="muted">
+            Each concert has its own seats and its own capacity. You are welcome at more than one.
+          </p>
+        </div>
+        <div class="concerts" data-concerts></div>
+
+        <div class="card">
+          <h2>How to reserve your seats</h2>
+          <p class="muted" style="margin-bottom: 1.5rem">
+            Four short steps. You will need a phone with WhatsApp, because that is where your
+            confirmation and seat number are sent.
+          </p>
+          <ol class="steps">
+            <li>
+              <div>
+                <strong>Register</strong>
+                <p>Name, contact details and date of birth. Attendees must be 18 or older.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Verify WhatsApp</strong>
+                <p>We message you a code. Enter it, or simply reply to the message.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Choose your seat</strong>
+                <p>Pick one seat from the plan. It is held for you the moment you confirm.</p>
+              </div>
+            </li>
+            <li>
+              <div>
+                <strong>Bring your reference</strong>
+                <p>Your booking reference arrives on WhatsApp. Show it at the door.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <div class="grid grid--2">
+          <div class="card">
+            <p class="eyebrow">Good to know</p>
+            <h3>There is no charge, ever</h3>
+            <p class="muted">
+              This is a free church event. Nobody will ask you for card details on this site, and
+              there is no payment step. If a page ever asks you to pay, it is not us.
+            </p>
+          </div>
+          <div class="card">
+            <p class="eyebrow">One seat each</p>
+            <h3>Booking for family or friends</h3>
+            <p class="muted">
+              Each account reserves one seat, so everyone attending registers with their own name
+              and WhatsApp number. To bring someone who cannot register themselves, call the church
+              office.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        Grace Community Church · Main Sanctuary, 12 Chapel Road ·
+        <a href="/concert.html">Concert details</a> ·
+        <a href="/admin/login.html">Staff sign-in</a>
+      </div>
+    </footer>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/home.js"></script>
+  </body>
+</html>

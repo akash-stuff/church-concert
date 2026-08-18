@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concert details</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap stack">
+        <div>
+          <p class="eyebrow">Concert details</p>
+          <h1 data-concert-name>—</h1>
+        </div>
+
+        <div class="notice" data-notice></div>
+
+        <div class="card card--split card--tint">
+          <div>
+            <h2>The evening</h2>
+            <p data-concert-description class="muted">—</p>
+            <dl class="detail" data-concert-detail></dl>
+          </div>
+          <figure class="card__art">
+            <img
+              class="poster"
+              src="/assets/poster.svg"
+              alt="Worship Night concert poster"
+              width="480"
+              height="600"
+            />
+          </figure>
+        </div>
+
+        <div class="card">
+          <h2>Seating</h2>
+          <p class="muted">
+            Seats are free and limited. The plan below shows what is left right now; it updates
+            each time the page is loaded.
+          </p>
+          <dl class="detail" data-availability></dl>
+          <div class="btn-row" style="margin-top: 1.25rem">
+            <a class="btn btn--primary" href="/register.html" data-cta>Reserve a seat</a>
+          </div>
+        </div>
+
+        <div class="card card--flush">
+          <div class="card__head">
+            <h2>Seat plan</h2>
+            <span class="muted mono" style="font-size: 0.6875rem">View only</span>
+          </div>
+          <div class="card__body">
+            <div class="nave" data-seatmap>
+              <div class="skeleton" style="height: 12rem"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · <a href="/">Home</a></div>
+    </footer>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/concert.js"></script>
+  </body>
+</html>

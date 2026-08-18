@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verify your WhatsApp number</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap wrap--narrow stack">
+        <div>
+          <p class="eyebrow">Step 2 of 3 · Verify</p>
+          <h1>Check WhatsApp</h1>
+          <p class="muted" data-verify-lede>
+            We sent a code to your WhatsApp number. Enter it below, or just reply to the message and
+            this page will catch up.
+          </p>
+        </div>
+
+        <div class="notice" data-notice></div>
+
+        <div class="card">
+          <form id="verify-form" novalidate>
+            <div class="field">
+              <label for="code">Verification code</label>
+              <input
+                id="code"
+                name="code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="8"
+                required
+                style="
+                  font-family: var(--mono);
+                  font-size: 1.5rem;
+                  letter-spacing: 0.35em;
+                  text-align: center;
+                "
+              />
+              <span class="field__error" data-error-for="code"></span>
+            </div>
+
+            <button class="btn btn--primary btn--block" type="submit">Verify my number</button>
+          </form>
+
+          <div class="btn-row" style="margin-top: 1.25rem">
+            <button class="btn btn--ghost btn--small" type="button" data-resend>
+              Send a new code
+            </button>
+            <a class="btn btn--ghost btn--small" href="/dashboard.html">Change my number</a>
+          </div>
+        </div>
+
+        <p class="center muted" style="font-size: 0.8125rem">
+          Not receiving anything? Check that the number in your profile is the one WhatsApp is
+          installed on, then request a new code.
+        </p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · <a href="/">Home</a></div>
+    </footer>
+
+    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
+    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
+
+    <script src="/js/core.js"></script>
+    <script src="/js/verify.js"></script>
+  </body>
+</html>

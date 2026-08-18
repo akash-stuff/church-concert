@@ -1,0 +1,1628 @@
+/* ===========================================================================
+   Church concerts — seat registration
+   Blue on white: a bright, plain-spoken booking site. One saturated blue does
+   all the persuading (primary buttons, the chosen seat, live figures); every
+   other surface is white or a pale wash of that same blue, so the seat map is
+   the busiest thing on any screen.
+
+   Illustrations and icons live in /assets and are referenced by URL only, so
+   the palette below stays the single place colour is decided.
+   =========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Surfaces, lightest to deepest. */
+  --surface: #ffffff;      /* cards, inputs, seats */
+  --page: #f5f8ff;         /* the page itself */
+  --wash: #eff6ff;         /* tinted panels, table heads, hover */
+  --wash-strong: #dbeafe;  /* gauges, swatches, the stage */
+  --line: #e5eaf4;         /* borders */
+  --line-strong: #cbd5e1;
+
+  /* Text. */
+  --ink: #0f172a;          /* headings */
+  --body-ink: #334155;     /* reading copy */
+  --muted: #64748b;        /* labels and hints; 4.8:1 on white */
+
+  /* Accents. */
+  --brand: #2563eb;        /* primary action, selection */
+  --brand-dark: #1d4ed8;   /* hover, headline accent */
+  --brand-light: #3b82f6;
+  --on-brand: #ffffff;
+  --ok: #16a34a;           /* confirmed, verified */
+  --ok-wash: #dcfce7;
+  --warn: #d97706;         /* held seats, pending */
+  --warn-wash: #fef3c7;
+  --danger: #dc2626;
+  --danger-wash: #fee2e2;
+
+  --display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --body: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --step-1: 0.8125rem;
+  --step0: 0.9375rem;
+  --step1: 1.125rem;
+  --step2: 1.5rem;
+  --step3: 2rem;
+  --step4: 2.75rem;
+
+  --gap: 1.25rem;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 26px -18px rgba(15, 23, 42, 0.35);
+  --shadow-lift: 0 2px 6px rgba(15, 23, 42, 0.06), 0 24px 48px -28px rgba(29, 78, 216, 0.45);
+  --focus: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--body);
+  font-size: var(--step0);
+  line-height: 1.6;
+  color: var(--body-ink);
+  background: var(--page);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  font-weight: 700;
+  line-height: 1.18;
+  color: var(--ink);
+  margin: 0 0 0.4em;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: var(--step3);
+}
+h2 {
+  font-size: var(--step2);
+}
+h3 {
+  font-size: var(--step1);
+}
+
+p {
+  margin: 0 0 1em;
+}
+a {
+  color: var(--brand-dark);
+  text-decoration-color: rgba(37, 99, 235, 0.35);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: var(--brand);
+  text-decoration-color: currentColor;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: 4px;
+}
+
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin: 0 0 0.6rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+.mono {
+  font-family: var(--mono);
+}
+.center {
+  text-align: center;
+}
+.stack > * + * {
+  margin-top: var(--gap);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- Shell ---------------------------------------------------------------- */
+
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.wrap--narrow {
+  max-width: 580px;
+}
+main {
+  flex: 1 0 auto;
+  padding: 2.5rem 0 4rem;
+  position: relative;
+  z-index: 1;
+}
+
+.masthead {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.masthead__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 68px;
+  padding: 0.75rem 1.25rem;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.masthead__mark {
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  line-height: 1.2;
+}
+.masthead__logo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+.masthead__text {
+  display: flex;
+  flex-direction: column;
+}
+.masthead__sub {
+  font-family: var(--body);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+.masthead nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.masthead nav a {
+  color: var(--body-ink);
+  font-size: var(--step-1);
+  font-weight: 600;
+  text-decoration: none;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+}
+.masthead nav a:hover {
+  background: var(--wash);
+  color: var(--brand-dark);
+}
+.masthead nav a[aria-current='page'] {
+  color: var(--brand-dark);
+  background: var(--wash);
+}
+/* The last item in the nav is always the call to action — Register when signed
+   out, Sign out when signed in — so it carries the filled treatment. */
+.masthead nav a:last-child {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+.masthead nav a:last-child:hover {
+  background: var(--brand-dark);
+  color: var(--on-brand);
+}
+
+.footer {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--step-1);
+  padding: 1.75rem 0;
+}
+.footer a {
+  color: var(--brand-dark);
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero {
+  background: linear-gradient(168deg, #eef4ff 0%, #f7faff 55%, var(--page) 100%);
+  position: relative;
+  overflow: hidden;
+  padding: 3.25rem 0 5.5rem;
+}
+/* A wash of brand colour behind the artwork, then the wave that hands the page
+   over to the white content below. */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -160px;
+  right: -140px;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(191, 219, 254, 0.55), rgba(239, 246, 255, 0) 68%);
+  pointer-events: none;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 90px;
+  background: url('/assets/wave.svg') bottom center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.hero__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+.hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+  gap: 2.5rem;
+  align-items: center;
+}
+.hero h1 {
+  font-size: clamp(2.1rem, 5.2vw, 3.25rem);
+  max-width: 18ch;
+  margin-bottom: 0.6rem;
+}
+.hero h1 em {
+  font-style: normal;
+  color: var(--brand-dark);
+}
+.hero__lede {
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: var(--step1);
+}
+.hero__art {
+  margin: 0;
+}
+.hero__art img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Date, time and venue as small white cards with an icon each. The order is
+   fixed by the page script: date, then time, then venue. */
+.hero__meta {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  list-style: none;
+  max-width: 22rem;
+}
+.hero__meta li {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0.7rem 0.9rem 0.7rem 2.9rem;
+  font-size: var(--step-1);
+  font-weight: 600;
+  color: var(--ink);
+  background-repeat: no-repeat;
+  background-position: 0.85rem center;
+  background-size: 1.15rem;
+}
+.hero__meta li:nth-child(1) {
+  background-image: url('/assets/icons/calendar.svg');
+}
+.hero__meta li:nth-child(2) {
+  background-image: url('/assets/icons/clock.svg');
+}
+.hero__meta li:nth-child(3) {
+  background-image: url('/assets/icons/pin.svg');
+}
+.hero__meta li.skeleton {
+  padding-left: 0;
+  background-image: none;
+}
+
+/* The count of seats still free. */
+.board {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brand);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 0.85rem 1.25rem;
+  margin: 0 0 1.75rem;
+}
+.board__count {
+  font-family: var(--display);
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+.board__label {
+  font-size: var(--step-1);
+  line-height: 1.35;
+  color: var(--muted);
+}
+.board__label strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 700;
+}
+.board--full {
+  border-left-color: var(--danger);
+}
+.board--full .board__count {
+  color: var(--danger);
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font: 600 var(--step0) / 1 var(--body);
+  padding: 0.8rem 1.4rem;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+  background: var(--brand);
+  color: var(--on-brand);
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease, transform 0.1s ease;
+}
+.btn:hover:not(:disabled) {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+  color: var(--on-brand);
+  box-shadow: 0 8px 18px -10px rgba(29, 78, 216, 0.8);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+/* The primary treatment is the same as the default button; the modifier is
+   kept because pages and scripts name it explicitly. */
+.btn--primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+}
+.btn--ghost {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--wash);
+  border-color: var(--brand);
+  color: var(--brand-dark);
+  box-shadow: var(--shadow-sm);
+}
+.btn--danger {
+  background: var(--surface);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.btn--small {
+  padding: 0.5rem 0.85rem;
+  font-size: var(--step-1);
+}
+.btn--block {
+  width: 100%;
+}
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* --- Cards and panels ---------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem;
+  box-shadow: var(--shadow);
+}
+.card--flush {
+  padding: 0;
+  overflow: hidden;
+}
+.card__head {
+  padding: 1.15rem 1.6rem;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--wash), var(--surface));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.card__head h2,
+.card__head h3 {
+  margin: 0;
+}
+.card__body {
+  padding: 1.6rem;
+}
+
+/* A tinted card, used to greet someone by name or to carry an illustration. */
+.card--tint {
+  background: linear-gradient(120deg, var(--wash) 0%, var(--surface) 65%);
+  border-color: var(--wash-strong);
+}
+.card--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  gap: 1.5rem;
+  align-items: center;
+}
+.card__art {
+  margin: 0;
+}
+.card__art img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.grid {
+  display: grid;
+  gap: var(--gap);
+}
+.grid--2 {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.grid--3 {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.grid--4 {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* Figures on the admin overview: number first, label under. */
+.figure {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--brand);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+.figure__value {
+  font-family: var(--display);
+  font-size: 1.875rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+.figure__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.35rem;
+}
+.figure--ruby {
+  border-top-color: var(--danger);
+}
+.figure--ruby .figure__value {
+  color: var(--danger);
+}
+.figure--verdigris {
+  border-top-color: var(--ok);
+}
+.figure--verdigris .figure__value {
+  color: var(--ok);
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: minmax(110px, 34%) 1fr;
+  gap: 0.7rem 1rem;
+  margin: 0;
+  font-size: var(--step0);
+}
+.detail dt {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 0.2rem;
+}
+.detail dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* --- Forms -------------------------------------------------------------- */
+
+.field {
+  margin-bottom: 1.1rem;
+}
+.field > label {
+  display: block;
+  font-weight: 600;
+  font-size: var(--step-1);
+  color: var(--ink);
+  margin-bottom: 0.4rem;
+}
+.field__hint {
+  font-size: var(--step-1);
+  color: var(--muted);
+  margin: 0.3rem 0 0;
+}
+input[type='text'],
+input[type='email'],
+input[type='tel'],
+input[type='password'],
+input[type='date'],
+input[type='number'],
+input[type='time'],
+input[type='datetime-local'],
+input[type='search'],
+select,
+textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+}
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: #a9bde0;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--brand);
+  box-shadow: var(--focus);
+}
+input[aria-invalid='true'],
+select[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.field__error {
+  display: block;
+  color: var(--danger);
+  font-size: var(--step-1);
+  font-weight: 600;
+  margin-top: 0.3rem;
+  min-height: 1px;
+}
+.check {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  margin-bottom: 0.9rem;
+  font-size: var(--step-1);
+}
+.check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.15rem 0 0;
+  flex: none;
+  accent-color: var(--brand);
+}
+fieldset {
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 1.5rem 0 0;
+  margin: 0 0 0.5rem;
+}
+fieldset legend {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand);
+  padding: 0 0.6rem 0 0;
+}
+
+/* --- Messages ----------------------------------------------------------- */
+
+.notice {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--body-ink);
+  padding: 0.9rem 1.1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--step0);
+  margin: 0 0 var(--gap);
+}
+.notice:empty {
+  display: none;
+}
+.notice--error {
+  border-color: #fecaca;
+  border-left-color: var(--danger);
+  background: var(--danger-wash);
+  color: #991b1b;
+}
+.notice--success {
+  border-color: #bbf7d0;
+  border-left-color: var(--ok);
+  background: var(--ok-wash);
+  color: #166534;
+}
+.notice--warn {
+  border-color: #fde68a;
+  border-left-color: var(--warn);
+  background: var(--warn-wash);
+  color: #92400e;
+}
+
+.pill {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pill--ok {
+  color: #166534;
+  background: var(--ok-wash);
+  border-color: #bbf7d0;
+}
+.pill--wait {
+  color: #92400e;
+  background: var(--warn-wash);
+  border-color: #fde68a;
+}
+.pill--off {
+  color: #991b1b;
+  background: var(--danger-wash);
+  border-color: #fecaca;
+}
+.pill--neutral {
+  color: var(--muted);
+  background: #f1f5f9;
+  border-color: var(--line);
+}
+
+/* --- The seat map: the signature ---------------------------------------- */
+
+.nave {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.25rem 2rem;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+
+/* The stage: a lit band at the head of the room. */
+.stage {
+  max-width: 420px;
+  margin: 0 auto 2.25rem;
+  height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--wash-strong), var(--wash));
+  border: 1px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--brand-dark);
+}
+
+.section-block + .section-block {
+  margin-top: 2rem;
+}
+.section-block__name {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.9rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.seat-rows {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  min-width: min-content;
+}
+
+/* Each seat is a rounded tile carrying its own number. */
+.seat {
+  position: relative;
+  font-family: var(--body);
+  font-size: 0.75rem;
+  font-weight: 700;
+  width: 3.125rem;
+  height: 2.75rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c7d7f2;
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--brand-dark);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.seat:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: var(--wash);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px -8px rgba(29, 78, 216, 0.7);
+}
+.seat[aria-pressed='true'] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -8px rgba(29, 78, 216, 0.9);
+}
+.seat[data-status='BOOKED'],
+.seat[data-status='RESERVED'],
+.seat[data-status='DISABLED'] {
+  cursor: not-allowed;
+}
+.seat[data-status='BOOKED'] {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+.seat[data-status='RESERVED'] {
+  background: var(--warn-wash);
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.seat[data-status='DISABLED'] {
+  background: #f1f5f9;
+  border-style: dashed;
+  border-color: var(--line-strong);
+  color: #94a3b8;
+}
+.seat[data-mine='true'] {
+  background: var(--ok-wash);
+  border: 2px solid var(--ok);
+  color: #166534;
+  cursor: default;
+  padding-top: 0.45rem;
+}
+/* A tick above the number, so "already yours" survives being printed in
+   greyscale or seen by someone who cannot separate green from blue. */
+.seat[data-mine='true']::before {
+  content: '✓';
+  position: absolute;
+  top: 0.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--ok);
+}
+.seat:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: center;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.legend__key {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.legend__swatch {
+  width: 1.15rem;
+  height: 1rem;
+  border: 1px solid #c7d7f2;
+  border-radius: 5px;
+  background: var(--surface);
+  flex: none;
+}
+.legend__swatch--selected {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.legend__swatch--booked {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+.legend__swatch--reserved {
+  background: var(--warn-wash);
+  border-color: #fcd34d;
+}
+.legend__swatch--disabled {
+  background: #f1f5f9;
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+.legend__swatch--mine {
+  background: var(--ok-wash);
+  border: 2px solid var(--ok);
+}
+
+/* Sticky confirmation bar on the seat screen. */
+.confirm-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: var(--gap);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--brand);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.35rem;
+  box-shadow: 0 -12px 32px -18px rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.confirm-bar__seat {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.confirm-bar__free {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+
+/* Booking reference, styled like something stamped on a ticket. */
+.reference {
+  font-family: var(--mono);
+  font-size: clamp(1.25rem, 5vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--brand-dark);
+  background: var(--wash);
+  border: 1px dashed #bfdbfe;
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  margin: 1.1rem 0;
+  overflow-wrap: anywhere;
+}
+
+/* --- Tables ------------------------------------------------------------- */
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--step-1);
+}
+th,
+td {
+  text-align: left;
+  padding: 0.75rem 0.95rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+th {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--wash);
+  white-space: nowrap;
+}
+td {
+  color: var(--body-ink);
+}
+tbody tr:hover {
+  background: #f8fbff;
+}
+td.num,
+th.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.table-empty {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* --- Admin shell -------------------------------------------------------- */
+
+.admin-body {
+  background: var(--page);
+}
+.admin-nav {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.admin-nav__inner {
+  display: flex;
+  gap: 0.25rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.admin-nav button {
+  font: 600 var(--step-1) / 1 var(--body);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 0.95rem 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.admin-nav button:hover {
+  color: var(--brand-dark);
+}
+.admin-nav button[aria-selected='true'] {
+  color: var(--brand-dark);
+  border-bottom-color: var(--brand);
+}
+.admin-wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.75rem 1rem 4rem;
+  width: 100%;
+}
+
+/* From large-tablet width up, the admin tabs become a side rail — where a
+   dashboard with this many sections wants its navigation. */
+@media (min-width: 60rem) {
+  .admin-body {
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
+  }
+  /* The rail is what stays with you while scrolling a long table, so the
+     header gives up its sticky position rather than fighting it. */
+  .admin-body > .masthead {
+    grid-column: 1 / -1;
+    position: static;
+  }
+  .admin-nav {
+    grid-column: 1;
+    border-bottom: none;
+    border-right: 1px solid var(--line);
+    overflow: visible;
+    min-height: calc(100vh - 69px);
+  }
+  .admin-nav__inner {
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 1.25rem 0.75rem;
+    position: sticky;
+    top: 1.25rem;
+  }
+  .admin-nav button {
+    text-align: left;
+    border-bottom: none;
+    border-radius: 8px;
+    padding: 0.7rem 0.85rem;
+  }
+  .admin-nav button:hover {
+    background: var(--wash);
+  }
+  .admin-nav button[aria-selected='true'] {
+    background: var(--brand);
+    color: var(--on-brand);
+  }
+  .admin-body > .admin-wrap {
+    grid-column: 2;
+    margin: 0;
+    max-width: none;
+    padding: 1.75rem 2rem 4rem;
+  }
+}
+
+.panel[hidden] {
+  display: none;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: var(--gap);
+}
+.toolbar input,
+.toolbar select {
+  width: auto;
+  min-width: 150px;
+  flex: 0 1 auto;
+}
+.toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+/* Seat tiles in the admin editor carry a small action menu. */
+.seat-admin {
+  position: relative;
+}
+.seat-admin .seat {
+  width: 3.5rem;
+}
+.seat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+.seat-actions button {
+  font: 600 0.5625rem/1 var(--body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.2rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.seat-actions button:hover {
+  border-color: var(--brand);
+  color: var(--brand-dark);
+  background: var(--wash);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  border-top: 1px solid var(--line);
+  background: var(--wash);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* --- Steps -------------------------------------------------------------- */
+
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0.9rem;
+  align-items: start;
+}
+.steps li::before {
+  content: counter(step);
+  font-family: var(--display);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--on-brand);
+  background: var(--brand);
+  border-radius: 50%;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.steps strong {
+  display: block;
+  color: var(--ink);
+}
+.steps p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: var(--step-1);
+}
+
+.skeleton {
+  height: 1rem;
+  background: linear-gradient(90deg, #eef2f9 25%, #f8fafc 50%, #eef2f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* --- Illustrated pages --------------------------------------------------- */
+
+/* Auth screens carry a church at the foot of the page and a sprig in the
+   corner: both decorative, both clear of the form. */
+.page-deco {
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.9;
+}
+.page-deco--church {
+  right: 2vw;
+  bottom: 0;
+  width: min(24rem, 30vw);
+}
+.page-deco--sprig {
+  left: 1.5vw;
+  bottom: 6vh;
+  width: min(9rem, 12vw);
+}
+@media (max-width: 64rem) {
+  .page-deco {
+    display: none;
+  }
+}
+
+.poster {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+}
+
+/* --- Concert cards -------------------------------------------------------- */
+
+.concerts {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+  margin: 0 0 2rem;
+}
+
+.concert-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--brand);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.concert-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+.concert-card--full {
+  border-top-color: var(--danger);
+}
+.concert-card--closed {
+  border-top-color: var(--line-strong);
+  opacity: 0.75;
+}
+.concert-card__date {
+  font-size: var(--step-1);
+  font-weight: 700;
+  color: var(--brand);
+}
+.concert-card h3 {
+  font-size: var(--step2);
+  margin: 0;
+  line-height: 1.15;
+}
+.concert-card__where {
+  color: var(--muted);
+  font-size: var(--step-1);
+  margin: 0;
+  padding-left: 1.4rem;
+  background: url('/assets/icons/pin.svg') left center / 1rem no-repeat;
+}
+.concert-card__lede {
+  margin: 0;
+  font-size: var(--step-1);
+  color: var(--body-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Remaining-seat bar. Width is set inline from the live figures. */
+.gauge {
+  height: 8px;
+  background: var(--wash-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gauge__fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-light), var(--brand-dark));
+  transition: width 0.4s ease;
+}
+.gauge--full .gauge__fill {
+  background: var(--danger);
+}
+
+.concert-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+.concert-card__seats {
+  font-size: var(--step-1);
+  color: var(--muted);
+}
+.concert-card__seats strong {
+  font-family: var(--display);
+  font-size: var(--step1);
+  font-weight: 800;
+  color: var(--brand-dark);
+}
+
+/* --- Concert switcher on the seat map ------------------------------------- */
+
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+}
+.switcher button {
+  font: 600 var(--step-1) / 1 var(--body);
+  padding: 0.65rem 1.05rem;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.switcher button:hover {
+  color: var(--brand-dark);
+  border-color: var(--brand);
+  background: var(--wash);
+}
+.switcher button[aria-pressed='true'] {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+
+/* --- Multi-seat selection ------------------------------------------------- */
+
+/* The chosen seats, listed so someone booking for a family can read back what
+   they are about to confirm without hunting the map. */
+.chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+}
+.chosen__seat {
+  font-size: var(--step-1);
+  font-weight: 700;
+  padding: 0.3rem 0.55rem;
+  background: var(--brand);
+  color: var(--on-brand);
+  border-radius: 6px;
+}
+.chosen__seat button {
+  all: unset;
+  cursor: pointer;
+  margin-left: 0.35rem;
+  font-weight: 700;
+  opacity: 0.75;
+}
+.chosen__seat button:hover {
+  opacity: 1;
+}
+.chosen__empty {
+  color: var(--muted);
+  font-size: var(--step-1);
+}
+
+.counter {
+  font-family: var(--display);
+  font-size: var(--step2);
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1;
+}
+.counter span {
+  font-family: var(--body);
+  font-size: var(--step-1);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* --- Party of seats on a booking ----------------------------------------- */
+
+.seat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.seat-tag {
+  font-size: var(--step-1);
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #bfdbfe;
+  background: var(--wash);
+  color: var(--brand-dark);
+  border-radius: 6px;
+}
+.seat-tag button {
+  all: unset;
+  cursor: pointer;
+  margin-left: 0.4rem;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.booking-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.booking-row:last-child {
+  border-bottom: 0;
+}
+.booking-row__ref {
+  font-family: var(--mono);
+  font-size: var(--step1);
+  font-weight: 600;
+  color: var(--brand-dark);
+  letter-spacing: 0.03em;
+}
+.booking-row__when {
+  color: var(--muted);
+  font-size: var(--step-1);
+}
+
+/* --- Export ------------------------------------------------------------- */
+
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.export-note {
+  font-size: var(--step-1);
+  color: var(--muted);
+  margin: 0.75rem 0 0;
+}
+
+/* --- Narrow screens ------------------------------------------------------ */
+
+@media (max-width: 64rem) {
+  .hero__grid {
+    grid-template-columns: 1fr;
+  }
+  .hero__art {
+    order: -1;
+  }
+  .card--split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 40rem) {
+  main {
+    padding: 1.75rem 0 3rem;
+  }
+  .hero {
+    padding: 2.25rem 0 4rem;
+  }
+  .masthead__inner {
+    flex-wrap: wrap;
+  }
+  .masthead nav a {
+    padding: 0.45rem 0.7rem;
+  }
+  .card {
+    padding: 1.25rem;
+  }
+  .card__head,
+  .card__body {
+    padding: 1.1rem 1.25rem;
+  }
+  .detail {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .detail dd {
+    margin-bottom: 0.6rem;
+  }
+  .seat {
+    width: 2.875rem;
+    height: 2.6rem;
+  }
+  .confirm-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .confirm-bar .btn {
+    width: 100%;
+  }
+  .concerts {
+    grid-template-columns: 1fr;
+  }
+  .booking-row {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  /* Ink saved: navigation, decoration and artwork come off the sheet, and the
+     ticket details print black on white. */
+  body {
+    background: #fff;
+    color: #111827;
+  }
+  .masthead,
+  .footer,
+  .confirm-bar,
+  .admin-nav,
+  .btn,
+  .legend,
+  .page-deco,
+  .hero__art,
+  .poster {
+    display: none !important;
+  }
+  .card,
+  .nave {
+    border-color: #9ca3af;
+    box-shadow: none;
+  }
+  .hero {
+    background: #fff;
+    padding: 1rem 0;
+  }
+  .hero::before,
+  .hero::after {
+    display: none;
+  }
+  .seat {
+    border-color: #6b7280;
+  }
+  .reference {
+    border-color: #6b7280;
+    background: #fff;
+  }
+}

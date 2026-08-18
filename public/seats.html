@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Choose your seats</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap stack">
+        <div>
+          <p class="eyebrow">Step 3 of 3 · Choose your seats</p>
+          <h1 data-concert-heading>Pick your seats</h1>
+          <p class="muted" data-seats-lede>
+            Tap as many seats as you need, then confirm. They are held the moment you confirm,
+            all under one booking reference, and there is nothing to pay.
+          </p>
+        </div>
+
+        <div class="switcher" data-switcher hidden aria-label="Choose a concert"></div>
+
+        <div class="notice" data-notice></div>
+
+        <div class="grid grid--4" data-availability></div>
+
+        <div class="nave" data-seatmap>
+          <div class="skeleton" style="height: 14rem"></div>
+        </div>
+
+        <div class="confirm-bar" data-confirm-bar hidden>
+          <div>
+            <p class="eyebrow" style="margin: 0 0 0.35rem">
+              <span class="counter" data-selected-count>0</span>
+              <span data-selected-word>seats chosen</span>
+              <span class="confirm-bar__free">· Booking fee: free</span>
+            </p>
+            <div class="chosen" data-chosen></div>
+            <p class="muted" style="margin: 0.4rem 0 0; font-size: 0.8125rem" data-confirm-who></p>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn--ghost" type="button" data-clear>Clear all</button>
+            <button class="btn btn--primary" type="button" data-confirm>Confirm booking</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · Admission is free · <a href="/dashboard.html">My booking</a></div>
+    </footer>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/seats.js"></script>
+  </body>
+</html>

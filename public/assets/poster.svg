@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600" width="480" height="600" role="img" aria-label="Worship Night concert poster">
+  <defs>
+    <linearGradient id="pbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1B3F"/><stop offset=".5" stop-color="#1E40AF"/><stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="pbeam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#DBEAFE" stop-opacity=".55"/><stop offset="1" stop-color="#DBEAFE" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="pglow" cx=".5" cy=".42" r=".55">
+      <stop offset="0" stop-color="#EFF6FF" stop-opacity=".55"/><stop offset="1" stop-color="#1D4ED8" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="pframe"><rect width="480" height="600" rx="20"/></clipPath>
+  </defs>
+  <g clip-path="url(#pframe)">
+    <rect width="480" height="600" fill="url(#pbg)"/>
+    <path d="M90 0 30 300h140L150 0z" fill="url(#pbeam)" opacity=".5"/>
+    <path d="M330 0 300 300h150L390 0z" fill="url(#pbeam)" opacity=".5"/>
+    <ellipse cx="240" cy="250" rx="220" ry="200" fill="url(#pglow)"/>
+    <g fill="#EFF6FF" opacity=".92">
+      <rect x="228" y="96" width="24" height="170" rx="5"/>
+      <rect x="186" y="146" width="108" height="24" rx="5"/>
+    </g>
+    <text x="240" y="374" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="76" fill="#FFFFFF">Worship</text>
+    <text x="240" y="446" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="76" fill="#BFDBFE">Night</text>
+    <rect x="150" y="474" width="180" height="2" fill="#93C5FD" opacity=".7"/>
+    <text x="240" y="510" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15" letter-spacing="6" fill="#DBEAFE">FREE ADMISSION</text>
+    <g fill="#0A1733" opacity=".85">
+      <path d="M0 556c46-4 74-20 116-20s70 18 112 18 74-20 118-20 88 16 134 20v46H0z"/>
+    </g>
+  </g>
+</svg>

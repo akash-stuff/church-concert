@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booking confirmed</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap wrap--narrow stack">
+        <div class="notice" data-notice></div>
+
+        <div class="card">
+          <img
+            src="/assets/icons/check.svg"
+            alt=""
+            aria-hidden="true"
+            width="44"
+            height="44"
+            style="width: 2.75rem; height: 2.75rem; margin-bottom: 0.75rem"
+          />
+          <p class="eyebrow">Booking successful</p>
+          <h1 style="margin-bottom: 0.25rem" data-headline>Your seats are reserved</h1>
+          <p class="muted">
+            A WhatsApp message with these details is on its way. Show the reference at the door.
+          </p>
+
+          <div class="reference" data-reference>—</div>
+
+          <dl class="detail" data-booking-detail></dl>
+
+          <div class="btn-row" style="margin-top: 1.5rem">
+            <a class="btn btn--primary" href="/api/bookings/mine/confirmation" target="_blank" rel="noopener" data-print-link>
+              Print confirmation
+            </a>
+            <a class="btn btn--ghost" href="/dashboard.html">Go to my dashboard</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>On the night</h3>
+          <p class="muted" style="margin: 0">
+            Arrive 20 minutes early so stewards can seat you without rushing. Everyone in your
+            party comes in under this one reference. If any of you can no longer come, release
+            those seats from your dashboard so somebody else can have them.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer"><div class="wrap">Grace Community Church · <a href="/">Home</a></div></footer>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/confirmed.js"></script>
+  </body>
+</html>

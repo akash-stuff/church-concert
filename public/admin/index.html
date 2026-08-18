@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Admin — Night of Worship</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body class="admin-body">
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/admin/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Administration</span>
+          </span>
+        </a>
+        <nav aria-label="Account">
+          <label class="muted" style="font-size: 0.6875rem" for="concert-picker">Concert</label>
+          <select id="concert-picker" data-concert-picker style="max-width: 15rem"></select>
+          <span class="muted mono" style="font-size: 0.6875rem" data-admin-name></span>
+          <a href="/" target="_blank" rel="noopener">Public site</a>
+          <a href="#signout" data-signout>Sign out</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="admin-nav">
+      <div class="admin-nav__inner" role="tablist" aria-label="Admin sections">
+        <button type="button" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+        <button type="button" role="tab" data-tab="users" aria-selected="false">Users</button>
+        <button type="button" role="tab" data-tab="bookings" aria-selected="false">Bookings</button>
+        <button type="button" role="tab" data-tab="seats" aria-selected="false">Seats</button>
+        <button type="button" role="tab" data-tab="concert" aria-selected="false">Concerts</button>
+        <button type="button" role="tab" data-tab="notifications" aria-selected="false">
+          Notifications
+        </button>
+        <button type="button" role="tab" data-tab="export" aria-selected="false">Export</button>
+        <button type="button" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+      </div>
+    </div>
+
+    <main class="admin-wrap">
+      <div class="notice" data-notice></div>
+
+      <!-- ============================ OVERVIEW ============================ -->
+      <section class="panel" data-panel="overview">
+        <div style="margin-bottom: 1.25rem">
+          <p class="eyebrow" data-concert-line>Loading</p>
+          <h1 style="margin: 0" data-concert-title>Overview</h1>
+        </div>
+
+        <div class="grid grid--4" data-figures style="margin-bottom: 1.5rem"></div>
+
+        <div class="card card--flush">
+          <div class="card__head">
+            <h2>Latest bookings</h2>
+            <button class="btn btn--ghost btn--small" type="button" data-refresh-overview>
+              Refresh
+            </button>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Name</th>
+                  <th>Seat</th>
+                  <th>Status</th>
+                  <th>Booked</th>
+                </tr>
+              </thead>
+              <tbody data-recent-bookings></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================= USERS ============================== -->
+      <section class="panel" data-panel="users" hidden>
+        <h1>Users</h1>
+        <div class="toolbar">
+          <input type="search" data-user-search placeholder="Name, email or number" />
+          <select data-user-status>
+            <option value="">All accounts</option>
+            <option value="active">Active only</option>
+            <option value="disabled">Disabled only</option>
+          </select>
+          <select data-user-verified>
+            <option value="">Any WhatsApp status</option>
+            <option value="yes">Verified</option>
+            <option value="no">Not verified</option>
+          </select>
+          <select data-user-booked>
+            <option value="">Any booking status</option>
+            <option value="yes">Has a seat</option>
+            <option value="no">No seat</option>
+          </select>
+          <button class="btn btn--small" type="button" data-user-search-go>Search</button>
+        </div>
+
+        <div class="card card--flush">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Contact</th>
+                  <th class="num">Age</th>
+                  <th>WhatsApp</th>
+                  <th>Seat</th>
+                  <th>Account</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody data-users></tbody>
+            </table>
+          </div>
+          <div class="pagination" data-users-pagination></div>
+        </div>
+
+        <div class="card" data-user-detail hidden style="margin-top: var(--gap)"></div>
+      </section>
+
+      <!-- ============================ BOOKINGS ============================ -->
+      <section class="panel" data-panel="bookings" hidden>
+        <h1>Bookings</h1>
+        <div class="toolbar">
+          <input type="search" data-booking-search placeholder="Reference, name or seat" />
+          <select data-booking-status>
+            <option value="">All statuses</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="PENDING">Pending</option>
+            <option value="CANCELLED">Cancelled</option>
+            <option value="EXPIRED">Expired</option>
+          </select>
+          <button class="btn btn--small" type="button" data-booking-search-go>Search</button>
+          <span class="toolbar__spacer"></span>
+          <button class="btn btn--small btn--primary" type="button" data-manual-booking>
+            Book a seat for someone
+          </button>
+        </div>
+
+        <div class="card card--flush">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Attendee</th>
+                  <th>Seat</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody data-bookings></tbody>
+            </table>
+          </div>
+          <div class="pagination" data-bookings-pagination></div>
+        </div>
+
+        <div class="card" data-manual-form hidden style="margin-top: var(--gap)">
+          <h2>Book a seat for someone</h2>
+          <p class="muted">
+            Use this for people who cannot register themselves. The attendee still needs an account,
+            and they receive the usual WhatsApp confirmation if their number is verified.
+          </p>
+          <form id="manual-booking-form">
+            <div class="grid grid--2">
+              <div class="field">
+                <label for="manual_user">Attendee</label>
+                <select id="manual_user" name="user_id" required></select>
+                <span class="field__error" data-error-for="user_id"></span>
+              </div>
+              <div class="field">
+                <label for="manual_seat">Seat</label>
+                <select id="manual_seat" name="seat_id" required></select>
+                <span class="field__error" data-error-for="seat_id"></span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="manual_note">Note (optional)</label>
+              <input id="manual_note" name="note" type="text" placeholder="Booked at the church office" />
+            </div>
+            <div class="btn-row">
+              <button class="btn btn--primary btn--small" type="submit">Create booking</button>
+              <button class="btn btn--ghost btn--small" type="button" data-manual-cancel>Close</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============================== SEATS ============================= -->
+      <section class="panel" data-panel="seats" hidden>
+        <h1>Seat layout</h1>
+        <p class="muted" style="max-width: 60ch">
+          The layout attendees see comes from here. Add sections, then add seats to them. A seat with
+          a live booking has to be released before it can be moved or removed.
+        </p>
+
+        <div class="grid grid--2" style="margin-bottom: var(--gap)">
+          <div class="card">
+            <h3>Add a section</h3>
+            <form id="section-form">
+              <div class="field">
+                <label for="section_name">Section name</label>
+                <input id="section_name" name="name" type="text" placeholder="Section C" required />
+                <span class="field__error" data-error-for="name"></span>
+              </div>
+              <div class="field">
+                <label for="section_order">Display order</label>
+                <input id="section_order" name="display_order" type="number" value="3" min="0" />
+              </div>
+              <button class="btn btn--small btn--primary" type="submit">Add section</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>Add a run of seats</h3>
+            <form id="bulk-seat-form">
+              <div class="field">
+                <label for="bulk_section">Section</label>
+                <select id="bulk_section" name="section_id" required></select>
+              </div>
+              <div class="grid grid--3">
+                <div class="field">
+                  <label for="bulk_prefix">Prefix</label>
+                  <input id="bulk_prefix" name="prefix" type="text" value="C" maxlength="8" required />
+                </div>
+                <div class="field">
+                  <label for="bulk_from">From</label>
+                  <input id="bulk_from" name="from" type="number" value="1" min="0" required />
+                </div>
+                <div class="field">
+                  <label for="bulk_to">To</label>
+                  <input id="bulk_to" name="to" type="number" value="10" min="0" required />
+                </div>
+              </div>
+              <p class="field__hint" style="margin-bottom: 0.9rem">
+                Prefix C, 1 to 10 creates C01 through C10.
+              </p>
+              <button class="btn btn--small btn--primary" type="submit">Add seats</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card card--flush">
+          <div class="card__head">
+            <h2>Current layout</h2>
+            <div class="btn-row" data-section-tools></div>
+          </div>
+          <div class="card__body">
+            <div class="nave" data-admin-seatmap>
+              <div class="skeleton" style="height: 10rem"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================ CONCERT ============================= -->
+      <section class="panel" data-panel="concert" hidden>
+        <h1>Concerts</h1>
+        <p class="muted">
+          More than one concert can run at the same time. Each keeps its own seats, capacity and
+          booking references.
+        </p>
+
+        <div class="card card--flush" style="margin-bottom: 1.5rem">
+          <div class="card__head">
+            <h2>All concerts</h2>
+            <div class="btn-row">
+              <button class="btn btn--ghost btn--small" type="button" data-new-concert>
+                Add a concert
+              </button>
+              <button class="btn btn--ghost btn--small" type="button" data-duplicate-concert>
+                Duplicate seat layout
+              </button>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Concert</th>
+                  <th>Date</th>
+                  <th class="num">Capacity</th>
+                  <th class="num">Booked</th>
+                  <th class="num">Seats</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody data-concerts-table></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="max-width: 720px; margin-bottom: 1.5rem" data-new-concert-form hidden>
+          <h2>Add a concert</h2>
+          <form id="new-concert-form">
+            <div class="field">
+              <label for="nc_name">Concert name</label>
+              <input id="nc_name" name="name" type="text" required />
+              <span class="field__error" data-error-for="name"></span>
+            </div>
+            <div class="grid grid--3">
+              <div class="field">
+                <label for="nc_date">Date</label>
+                <input id="nc_date" name="event_date" type="date" required />
+                <span class="field__error" data-error-for="event_date"></span>
+              </div>
+              <div class="field">
+                <label for="nc_start">Start time</label>
+                <input id="nc_start" name="start_time" type="time" required />
+                <span class="field__error" data-error-for="start_time"></span>
+              </div>
+              <div class="field">
+                <label for="nc_capacity">Capacity</label>
+                <input id="nc_capacity" name="max_capacity" type="number" min="1" value="10" />
+                <span class="field__error" data-error-for="max_capacity"></span>
+              </div>
+            </div>
+            <div class="grid grid--2">
+              <div class="field">
+                <label for="nc_venue">Venue</label>
+                <input id="nc_venue" name="venue" type="text" required />
+                <span class="field__error" data-error-for="venue"></span>
+              </div>
+              <div class="field">
+                <label for="nc_prefix">Reference prefix</label>
+                <input id="nc_prefix" name="booking_ref_prefix" type="text" value="CHC" />
+                <span class="field__hint">Numbering starts at 00001 for each concert.</span>
+                <span class="field__error" data-error-for="booking_ref_prefix"></span>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn--primary" type="submit">Create concert</button>
+              <button class="btn btn--ghost" type="button" data-cancel-new-concert>Cancel</button>
+            </div>
+          </form>
+        </div>
+
+        <h2 data-concert-editing>Edit concert</h2>
+        <div class="card" style="max-width: 720px">
+          <form id="concert-form">
+            <div class="field">
+              <label for="c_name">Concert name</label>
+              <input id="c_name" name="name" type="text" required />
+              <span class="field__error" data-error-for="name"></span>
+            </div>
+            <div class="field">
+              <label for="c_description">Description</label>
+              <textarea id="c_description" name="description"></textarea>
+            </div>
+
+            <div class="grid grid--3">
+              <div class="field">
+                <label for="c_event_date">Date</label>
+                <input id="c_event_date" name="event_date" type="date" required />
+                <span class="field__error" data-error-for="event_date"></span>
+              </div>
+              <div class="field">
+                <label for="c_start">Start time</label>
+                <input id="c_start" name="start_time" type="time" required />
+              </div>
+              <div class="field">
+                <label for="c_end">End time</label>
+                <input id="c_end" name="end_time" type="time" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="c_venue">Venue</label>
+              <input id="c_venue" name="venue" type="text" required />
+            </div>
+            <div class="field">
+              <label for="c_address">Address</label>
+              <input id="c_address" name="address" type="text" />
+            </div>
+
+            <fieldset>
+              <legend>Capacity</legend>
+              <div class="field">
+                <label for="c_capacity">Maximum booking capacity</label>
+                <input id="c_capacity" name="max_capacity" type="number" min="1" max="100000" required />
+                <p class="field__hint">
+                  The hard limit on confirmed bookings, enforced in the database. It cannot be set
+                  below the number of seats already taken.
+                </p>
+                <span class="field__error" data-error-for="max_capacity"></span>
+              </div>
+              <div class="field">
+                <label for="c_prefix">Booking reference prefix</label>
+                <input id="c_prefix" name="booking_ref_prefix" type="text" maxlength="12" />
+                <p class="field__hint">CHC produces references like CHC-2026-00001.</p>
+                <span class="field__error" data-error-for="booking_ref_prefix"></span>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Open and close times</legend>
+              <p class="field__hint" style="margin-top: 0">
+                Leave a field empty to leave that gate open.
+              </p>
+              <div class="grid grid--2">
+                <div class="field">
+                  <label for="c_reg_open">Registration opens</label>
+                  <input id="c_reg_open" name="registration_opens_at" type="datetime-local" />
+                </div>
+                <div class="field">
+                  <label for="c_reg_close">Registration closes</label>
+                  <input id="c_reg_close" name="registration_closes_at" type="datetime-local" />
+                </div>
+                <div class="field">
+                  <label for="c_book_open">Booking opens</label>
+                  <input id="c_book_open" name="booking_opens_at" type="datetime-local" />
+                </div>
+                <div class="field">
+                  <label for="c_book_close">Booking closes</label>
+                  <input id="c_book_close" name="booking_closes_at" type="datetime-local" />
+                </div>
+              </div>
+            </fieldset>
+
+            <div class="field">
+              <label for="c_per_person">Seats per person</label>
+              <input id="c_per_person" name="max_seats_per_booking" type="number" min="0" />
+              <span class="field__hint">
+                0 means no limit, so capacity is the only thing that stops someone. Set 4 to cap a
+                family at four seats.
+              </span>
+              <span class="field__error" data-error-for="max_seats_per_booking"></span>
+            </div>
+
+            <button class="btn btn--primary" type="submit">Save concert settings</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============================ EXPORT ============================== -->
+      <section class="panel" data-panel="export" hidden>
+        <h1>Export</h1>
+        <p class="muted">
+          Downloads open in a spreadsheet. Files cover the concert selected at the top of the page,
+          or every concert if you choose that.
+        </p>
+
+        <div class="grid grid--2">
+          <div class="card">
+            <h2>Users</h2>
+            <p class="muted">
+              Every registered account with contact details, age, and how many seats they hold.
+            </p>
+            <div class="export-row">
+              <a class="btn btn--primary" data-export-users href="#">Download users CSV</a>
+            </div>
+            <p class="export-note" data-export-users-note></p>
+          </div>
+
+          <div class="card">
+            <h2>Bookings</h2>
+            <p class="muted">
+              One row per seat, sorted by seat number so it works as a door list. Includes the
+              attendee, their WhatsApp number, and the party size.
+            </p>
+            <div class="field">
+              <label for="export_status">Include</label>
+              <select id="export_status" data-export-status>
+                <option value="live">Live bookings only</option>
+                <option value="all">Every booking, including cancelled</option>
+                <option value="cancelled">Cancelled only</option>
+              </select>
+            </div>
+            <div class="export-row">
+              <a class="btn btn--primary" data-export-bookings href="#">Download bookings CSV</a>
+            </div>
+            <p class="export-note" data-export-bookings-note></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>A note on opening these</h2>
+          <p class="muted" style="margin: 0">
+            Phone numbers are written with a leading apostrophe. Without it a spreadsheet reads
+            <span class="mono">+919812345001</span> as a formula and mangles it. The apostrophe is
+            not part of the number and will not appear when you print or mail-merge.
+          </p>
+        </div>
+      </section>
+
+      <!-- ========================= NOTIFICATIONS ========================== -->
+      <section class="panel" data-panel="notifications" hidden>
+        <h1>Notifications</h1>
+        <div class="toolbar">
+          <input type="search" data-notif-search placeholder="Recipient or name" />
+          <select data-notif-status>
+            <option value="">All statuses</option>
+            <option value="SENT">Sent</option>
+            <option value="DELIVERED">Delivered</option>
+            <option value="READ">Read</option>
+            <option value="QUEUED">Queued</option>
+            <option value="FAILED">Failed</option>
+          </select>
+          <select data-notif-type>
+            <option value="">All types</option>
+            <option value="REGISTRATION">Registration</option>
+            <option value="WHATSAPP_VERIFICATION">WhatsApp verification</option>
+            <option value="BOOKING_CONFIRMATION">Booking confirmation</option>
+            <option value="BOOKING_CANCELLATION">Booking cancellation</option>
+            <option value="SEAT_REASSIGNMENT">Seat reassignment</option>
+            <option value="EVENT_REMINDER">Event reminder</option>
+            <option value="PASSWORD_RESET">Password reset</option>
+          </select>
+          <button class="btn btn--small" type="button" data-notif-search-go>Search</button>
+          <span class="toolbar__spacer"></span>
+          <button class="btn btn--small btn--primary" type="button" data-send-reminders>
+            Send event reminders
+          </button>
+        </div>
+
+        <div class="card card--flush">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Recipient</th>
+                  <th>Status</th>
+                  <th>Sent</th>
+                  <th>Failure reason</th>
+                </tr>
+              </thead>
+              <tbody data-notifications></tbody>
+            </table>
+          </div>
+          <div class="pagination" data-notifications-pagination></div>
+        </div>
+      </section>
+
+      <!-- =========================== SETTINGS ============================= -->
+      <section class="panel" data-panel="settings" hidden>
+        <h1>Settings</h1>
+
+        <div class="grid grid--2">
+          <div class="card">
+            <h2>Registration rules</h2>
+            <form id="settings-form">
+              <div class="field">
+                <label for="s_min_age">Minimum age</label>
+                <input id="s_min_age" name="minimum_age" type="number" min="18" max="99" />
+                <p class="field__hint">Cannot be set below 18.</p>
+                <span class="field__error" data-error-for="minimum_age"></span>
+              </div>
+
+              <fieldset>
+                <legend>Treat as unique per account</legend>
+                <div class="check">
+                  <input id="s_dup_email" type="checkbox" data-dup="email" />
+                  <label for="s_dup_email">Email address</label>
+                </div>
+                <div class="check">
+                  <input id="s_dup_mobile" type="checkbox" data-dup="mobile_number" />
+                  <label for="s_dup_mobile">Mobile number</label>
+                </div>
+                <div class="check">
+                  <input id="s_dup_whatsapp" type="checkbox" data-dup="whatsapp_number" />
+                  <label for="s_dup_whatsapp">WhatsApp number</label>
+                </div>
+                <p class="field__hint">
+                  All three stay unique in the database regardless; this controls the message people
+                  see when a duplicate is caught during registration.
+                </p>
+              </fieldset>
+
+              <div class="check">
+                <input id="s_require_wa" name="require_whatsapp_verification" type="checkbox" />
+                <label for="s_require_wa">Require WhatsApp verification before booking</label>
+              </div>
+              <div class="check">
+                <input id="s_self_cancel" name="allow_user_self_cancel" type="checkbox" />
+                <label for="s_self_cancel">Let attendees cancel their own booking</label>
+              </div>
+
+              <button class="btn btn--primary btn--small" type="submit">Save settings</button>
+            </form>
+          </div>
+
+          <div class="card card--flush">
+            <div class="card__head">
+              <h2>Recent admin activity</h2>
+              <button class="btn btn--ghost btn--small" type="button" data-refresh-audit>
+                Refresh
+              </button>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Who</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                  </tr>
+                </thead>
+                <tbody data-audit></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/core.js"></script>
+    <script src="/admin/admin.js"></script>
+  </body>
+</html>

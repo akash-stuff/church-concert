@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Register — Night of Worship</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap wrap--narrow stack">
+        <div>
+          <p class="eyebrow">Step 1 of 3 · Register</p>
+          <h1>Create your account</h1>
+          <p class="muted">
+            Attendees must be 18 or older. Your WhatsApp number is where your seat confirmation
+            goes, so use a number you can read messages on today.
+          </p>
+        </div>
+
+        <div class="notice" data-notice></div>
+
+        <div class="card">
+          <form id="register-form" novalidate>
+            <fieldset>
+              <legend>About you</legend>
+
+              <div class="field">
+                <label for="full_name">Full name</label>
+                <input id="full_name" name="full_name" type="text" autocomplete="name" required />
+                <span class="field__error" data-error-for="full_name"></span>
+              </div>
+
+              <div class="field">
+                <label for="date_of_birth">Date of birth</label>
+                <input id="date_of_birth" name="date_of_birth" type="date" required />
+                <p class="field__hint">
+                  Used to confirm you are 18 or older. We check this on the server.
+                </p>
+                <span class="field__error" data-error-for="date_of_birth"></span>
+              </div>
+
+              <div class="field">
+                <label for="gender">Gender</label>
+                <select id="gender" name="gender" required>
+                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="MALE">Male</option>
+                  <option value="OTHER">Other</option>
+                </select>
+                <span class="field__error" data-error-for="gender"></span>
+              </div>
+
+              <div class="field">
+                <label for="address">Address</label>
+                <textarea id="address" name="address" autocomplete="street-address" required></textarea>
+                <span class="field__error" data-error-for="address"></span>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>How we reach you</legend>
+
+              <div class="field">
+                <label for="email">Email address</label>
+                <input id="email" name="email" type="email" autocomplete="email" required />
+                <span class="field__error" data-error-for="email"></span>
+              </div>
+
+              <div class="field">
+                <label for="mobile_number">Mobile number</label>
+                <input
+                  id="mobile_number"
+                  name="mobile_number"
+                  type="tel"
+                  autocomplete="tel"
+                  placeholder="+91 98765 43210"
+                  required
+                />
+                <span class="field__error" data-error-for="mobile_number"></span>
+              </div>
+
+              <div class="field">
+                <label for="whatsapp_number">WhatsApp number</label>
+                <input
+                  id="whatsapp_number"
+                  name="whatsapp_number"
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  required
+                />
+                <div class="check" style="margin-top: 0.6rem">
+                  <input id="same_as_mobile" type="checkbox" />
+                  <label for="same_as_mobile">Same as my mobile number</label>
+                </div>
+                <span class="field__error" data-error-for="whatsapp_number"></span>
+              </div>
+
+              <div class="field">
+                <label for="emergency_contact">Emergency contact number</label>
+                <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                <p class="field__hint">Someone we can call on the night if you need help.</p>
+                <span class="field__error" data-error-for="emergency_contact"></span>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Your password</legend>
+              <div class="field">
+                <label for="password">Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  required
+                />
+                <p class="field__hint">
+                  At least 10 characters, with an uppercase letter, a lowercase letter and a number.
+                </p>
+                <span class="field__error" data-error-for="password"></span>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Confirmations</legend>
+              <div class="check">
+                <input id="confirm_age" name="confirm_age" type="checkbox" required />
+                <label for="confirm_age">I confirm I am 18 years of age or older.</label>
+              </div>
+              <span class="field__error" data-error-for="confirm_age"></span>
+
+              <div class="check">
+                <input id="accept_terms" name="accept_terms" type="checkbox" required />
+                <label for="accept_terms">
+                  I accept the terms and conditions, and agree to receive WhatsApp messages about
+                  this concert.
+                </label>
+              </div>
+              <span class="field__error" data-error-for="accept_terms"></span>
+            </fieldset>
+
+            <button class="btn btn--primary btn--block" type="submit">Register and send my code</button>
+          </form>
+        </div>
+
+        <p class="center muted">Already registered? <a href="/login.html">Sign in</a></p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · Admission is free · <a href="/">Home</a></div>
+    </footer>
+
+    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
+    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
+
+
+    <script src="/js/core.js"></script>
+    <script src="/js/register.js"></script>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+# Local development stack: the app plus a throwaway MySQL.
+#
+#   cp .env.example .env      # then edit JWT_SECRET and the WhatsApp values
+#   docker compose up --build
+#   docker compose exec app npm run migrate
+#   docker compose exec app npm run seed:admin
+#
+# In production you already have MySQL, so run the `app` service only and point
+# DATABASE_URL at your existing server. Do not deploy the `db` service.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Overrides .env so the container talks to the db service, not localhost.
+      DATABASE_URL: mysql://concert:concert_local_password@db:3306/church_concert
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --transaction-isolation=READ-COMMITTED
+    environment:
+      MYSQL_DATABASE: church_concert
+      MYSQL_USER: concert
+      MYSQL_PASSWORD: concert_local_password
+      MYSQL_ROOT_PASSWORD: root_local_password
+    ports:
+      # Exposed on 3307 so it cannot clash with a MySQL already on the host.
+      - '3307:3306'
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-proot_local_password']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db_data:

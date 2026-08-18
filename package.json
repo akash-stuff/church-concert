@@ -1,0 +1,35 @@
+{
+  "name": "church-concert-seating",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free seat booking and registration platform for a church concert, with WhatsApp verification and an admin dashboard.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate:status": "node scripts/migrate.js --status",
+    "seed:admin": "node scripts/seed-admin.js",
+    "seed:seats": "node scripts/seed-seats.js",
+    "check": "node scripts/syntax-check.js",
+    "test": "node scripts/test-integration.js",
+    "test:stress": "node scripts/test-stress.js",
+    "test:reset": "node scripts/test-reset.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.23.3",
+    "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "argon2": "^0.41.1"
+  }
+}

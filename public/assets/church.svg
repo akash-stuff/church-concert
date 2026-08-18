@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 320" width="420" height="320" role="img" aria-label="Church building illustration">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E8F0FF"/><stop offset="1" stop-color="#CBDDFB"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="210" cy="292" rx="185" ry="20" fill="#DBEAFE"/>
+  <!-- tower -->
+  <path d="M150 128h60v152h-60z" fill="url(#wall)"/>
+  <path d="M180 44l38 46h-76z" fill="url(#roof)"/>
+  <path d="M142 90h76v40h-76z" fill="url(#roof)" opacity=".85"/>
+  <path d="M176 12h8v28h-8z" fill="#1D4ED8"/><path d="M166 22h28v8h-28z" fill="#1D4ED8"/>
+  <!-- nave -->
+  <path d="M210 168h150v112H210z" fill="url(#wall)"/>
+  <path d="M204 168l84-40 78 40z" fill="url(#roof)"/>
+  <path d="M60 190h90v90H60z" fill="url(#wall)" opacity=".9"/>
+  <path d="M54 190l51-30 51 30z" fill="url(#roof)" opacity=".8"/>
+  <!-- windows -->
+  <g fill="#93C5FD">
+    <path d="M168 148a12 12 0 0124 0v28h-24z"/>
+    <path d="M238 206a14 14 0 0128 0v40h-28z"/>
+    <path d="M300 206a14 14 0 0128 0v40h-28z"/>
+    <path d="M88 220a12 12 0 0124 0v34H88z"/>
+  </g>
+  <!-- doors -->
+  <path d="M164 214a16 16 0 0132 0v66h-32z" fill="#1D4ED8"/>
+  <circle cx="190" cy="252" r="3" fill="#DBEAFE"/>
+  <!-- ground line -->
+  <path d="M20 280h380" stroke="#BFDBFE" stroke-width="4" stroke-linecap="round"/>
+</svg>

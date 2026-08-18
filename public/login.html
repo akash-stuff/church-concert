@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in — Night of Worship</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="masthead__inner">
+        <a class="masthead__mark" href="/">
+          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
+          <span class="masthead__text">
+            <span class="masthead__name">Night of Worship</span>
+            <span class="masthead__sub">Seat register</span>
+          </span>
+        </a>
+        <nav data-nav aria-label="Main"></nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap wrap--narrow stack">
+        <div>
+          <p class="eyebrow">Welcome back</p>
+          <h1>Sign in</h1>
+          <p class="muted">Use the email, mobile or WhatsApp number you registered with.</p>
+        </div>
+
+        <div class="notice" data-notice></div>
+
+        <div class="card">
+          <form id="login-form" novalidate>
+            <div class="field">
+              <label for="identifier">Email or phone number</label>
+              <input id="identifier" name="identifier" type="text" autocomplete="username" required />
+              <span class="field__error" data-error-for="identifier"></span>
+            </div>
+
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" required />
+              <span class="field__error" data-error-for="password"></span>
+            </div>
+
+            <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+          </form>
+
+          <p class="center muted" style="margin: 1.25rem 0 0; font-size: 0.8125rem">
+            <a href="/forgot-password.html">Forgotten your password?</a>
+          </p>
+        </div>
+
+        <p class="center muted">No account yet? <a href="/register.html">Register for a seat</a></p>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">Grace Community Church · <a href="/">Home</a> · <a href="/admin/login.html">Staff sign-in</a></div>
+    </footer>
+
+    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
+    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
+
+
+    <script src="/js/core.js"></script>
+    <script src="/js/login.js"></script>
+  </body>
+</html>
