@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="A candlelit carol service on a winter evening">
+  <defs>
+    <linearGradient id="ca-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1322"/>
+      <stop offset="0.6" stop-color="#152441"/>
+      <stop offset="1" stop-color="#24365a"/>
+    </linearGradient>
+    <radialGradient id="ca-moon" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f6e6c2"/>
+      <stop offset="0.6" stop-color="#f6e6c2" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#f6e6c2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ca-flame" cx="0.5" cy="0.6" r="0.5">
+      <stop offset="0" stop-color="#ffdf9e"/>
+      <stop offset="1" stop-color="#e0ac4c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="800" height="450" fill="url(#ca-sky)"/>
+
+  <!-- Winter sky: a low moon and a scatter of stars. -->
+  <circle cx="640" cy="96" r="72" fill="url(#ca-moon)" opacity=".8"/>
+  <circle cx="640" cy="96" r="26" fill="#f6e6c2" opacity=".9"/>
+  <g fill="#dce6f5" opacity=".7">
+    <circle cx="96" cy="62" r="2"/><circle cx="168" cy="104" r="1.6"/><circle cx="242" cy="52" r="2.2"/>
+    <circle cx="330" cy="92" r="1.6"/><circle cx="424" cy="46" r="2"/><circle cx="500" cy="112" r="1.6"/>
+    <circle cx="726" cy="164" r="1.8"/><circle cx="60" cy="150" r="1.6"/><circle cx="286" cy="140" r="1.5"/>
+  </g>
+
+  <!-- The church, in silhouette, with its windows lit. -->
+  <g>
+    <path d="M336 220v-52l40-34 40 34v52z" fill="#0b1322"/>
+    <path d="M376 92l10 16h-20z" fill="#0b1322"/>
+    <path d="M370 60h12v42h-12z" fill="#0b1322"/>
+    <path d="M358 74h36v11h-36z" fill="#0b1322"/>
+    <path d="M232 330V214l104-58 104 58v116z" fill="#101c31"/>
+    <path d="M440 330V236l88-46 88 46v94z" fill="#0b1322"/>
+    <g fill="#e0ac4c" opacity=".9">
+      <path d="M280 250c0-11 9-20 20-20s20 9 20 20v38h-40z"/>
+      <path d="M352 250c0-11 9-20 20-20s20 9 20 20v38h-40z"/>
+      <rect x="486" y="252" width="30" height="42" rx="15"/>
+      <rect x="546" y="252" width="30" height="42" rx="15"/>
+    </g>
+  </g>
+
+  <!-- Snow-lit ground. -->
+  <path d="M0 330h800v120H0z" fill="#1b2b48"/>
+  <path d="M0 330c120-14 200 10 300 6s180-22 300-10 200 6 200 6v118H0z" fill="#22345a" opacity=".8"/>
+
+  <!-- The congregation, each with a candle. The flames are the only warm
+       colour below the horizon, which is what makes the row read. -->
+  <g>
+    <g fill="#0b1322">
+      <circle cx="120" cy="356" r="16"/><rect x="102" y="374" width="36" height="60" rx="14"/>
+      <circle cx="196" cy="350" r="16"/><rect x="178" y="368" width="36" height="66" rx="14"/>
+      <circle cx="272" cy="356" r="16"/><rect x="254" y="374" width="36" height="60" rx="14"/>
+      <circle cx="348" cy="350" r="16"/><rect x="330" y="368" width="36" height="66" rx="14"/>
+      <circle cx="452" cy="352" r="16"/><rect x="434" y="370" width="36" height="64" rx="14"/>
+      <circle cx="528" cy="356" r="16"/><rect x="510" y="374" width="36" height="60" rx="14"/>
+      <circle cx="604" cy="350" r="16"/><rect x="586" y="368" width="36" height="66" rx="14"/>
+      <circle cx="680" cy="356" r="16"/><rect x="662" y="374" width="36" height="60" rx="14"/>
+    </g>
+    <g>
+      <g><circle cx="150" cy="392" r="20" fill="url(#ca-flame)"/><rect x="147" y="392" width="6" height="26" fill="#f6e6c2"/><circle cx="150" cy="388" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="226" cy="386" r="20" fill="url(#ca-flame)"/><rect x="223" y="386" width="6" height="26" fill="#f6e6c2"/><circle cx="226" cy="382" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="302" cy="392" r="20" fill="url(#ca-flame)"/><rect x="299" y="392" width="6" height="26" fill="#f6e6c2"/><circle cx="302" cy="388" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="378" cy="386" r="20" fill="url(#ca-flame)"/><rect x="375" y="386" width="6" height="26" fill="#f6e6c2"/><circle cx="378" cy="382" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="482" cy="388" r="20" fill="url(#ca-flame)"/><rect x="479" y="388" width="6" height="26" fill="#f6e6c2"/><circle cx="482" cy="384" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="558" cy="392" r="20" fill="url(#ca-flame)"/><rect x="555" y="392" width="6" height="26" fill="#f6e6c2"/><circle cx="558" cy="388" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="634" cy="386" r="20" fill="url(#ca-flame)"/><rect x="631" y="386" width="6" height="26" fill="#f6e6c2"/><circle cx="634" cy="382" r="4.5" fill="#ffdf9e"/></g>
+      <g><circle cx="710" cy="392" r="20" fill="url(#ca-flame)"/><rect x="707" y="392" width="6" height="26" fill="#f6e6c2"/><circle cx="710" cy="388" r="4.5" fill="#ffdf9e"/></g>
+    </g>
+  </g>
+</svg>

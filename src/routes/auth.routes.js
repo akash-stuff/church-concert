@@ -446,7 +446,7 @@ router.post(
   '/admin/login',
   authLimiter,
   asyncRoute(async (req, res) => {
-    const { email, password } = parse(schemas.adminLoginSchema, req.body);
+    const { email, password, remember } = parse(schemas.adminLoginSchema, req.body);
     const admin = await db.queryOne('SELECT * FROM admins WHERE email = ? LIMIT 1', [email]);
     const generic = unauthorized('Those details do not match an admin account.', 'INVALID_CREDENTIALS');
 
@@ -465,7 +465,7 @@ router.post(
     if (!admin.is_active) throw forbidden('This admin account is disabled.');
 
     await db.query('UPDATE admins SET last_login_at = NOW() WHERE id = ?', [admin.id]);
-    auth.issueAdminSession(res, admin);
+    auth.issueAdminSession(res, admin, { remember: remember === true });
 
     req.admin = admin;
     await audit(req, { action: 'ADMIN_LOGIN' });
@@ -473,6 +473,35 @@ router.post(
     res.json({
       admin: { id: admin.id, full_name: admin.full_name, email: admin.email, role: admin.role },
     });
+  }),
+);
+
+
+/** An administrator changing their own password. */
+router.post(
+  '/admin/password',
+  auth.requireAdmin,
+  asyncRoute(async (req, res) => {
+    const data = parse(schemas.changePasswordSchema, req.body);
+
+    const admin = await db.queryOne('SELECT * FROM admins WHERE id = ? LIMIT 1', [req.admin.id]);
+    const ok = await verifyPassword(admin.password_hash, data.current_password);
+    if (!ok) throw unauthorized('That is not your current password.', 'INVALID_CREDENTIALS');
+
+    // Bumping token_version invalidates every session this admin has anywhere,
+    // which is the point of changing a password. The one being used right now
+    // is reissued below so they are not signed out of the tab they are in.
+    await db.query(
+      'UPDATE admins SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
+      [await hashPassword(data.new_password), admin.id],
+    );
+
+    const updated = await db.queryOne('SELECT * FROM admins WHERE id = ? LIMIT 1', [admin.id]);
+    auth.issueAdminSession(res, updated);
+
+    await audit(req, { action: 'ADMIN_PASSWORD_CHANGED', entityType: 'ADMIN', entityId: admin.id });
+
+    res.json({ ok: true, message: 'Password changed. Other sessions have been signed out.' });
   }),
 );
 

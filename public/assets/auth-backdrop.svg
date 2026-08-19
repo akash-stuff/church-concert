@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1200" width="1000" height="1200" preserveAspectRatio="xMidYMid slice" role="img" aria-label="A sanctuary interior at dusk">
+  <defs>
+    <linearGradient id="ab-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#080e1b"/>
+      <stop offset="0.45" stop-color="#101c31"/>
+      <stop offset="1" stop-color="#1d2e4e"/>
+    </linearGradient>
+    <linearGradient id="ab-window" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3d69a" stop-opacity=".9"/>
+      <stop offset="0.55" stop-color="#e0ac4c" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#b58328" stop-opacity=".15"/>
+    </linearGradient>
+    <linearGradient id="ab-beam" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#f3d69a" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#f3d69a" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ab-halo" cx="0.5" cy="0.3" r="0.6">
+      <stop offset="0" stop-color="#f3d69a" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#f3d69a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1000" height="1200" fill="url(#ab-bg)"/>
+  <ellipse cx="500" cy="380" rx="520" ry="420" fill="url(#ab-halo)"/>
+
+  <!-- Nave arcade, receding toward the chancel. -->
+  <g fill="none" stroke="#22345a" stroke-width="10" opacity=".7">
+    <path d="M60 1200V520a160 160 0 01320 0v680"/>
+    <path d="M620 1200V520a160 160 0 01320 0v680"/>
+  </g>
+  <g fill="none" stroke="#2c4066" stroke-width="7" opacity=".5">
+    <path d="M170 1200V560a110 110 0 01220 0v640"/>
+    <path d="M610 1200V560a110 110 0 01220 0v640"/>
+  </g>
+
+  <!-- The great east window. -->
+  <g>
+    <path d="M500 150c96 0 174 78 174 174v420H326V324c0-96 78-174 174-174z" fill="#0b1322"/>
+    <path d="M500 182c78 0 142 64 142 142v390H358V324c0-78 64-142 142-142z" fill="url(#ab-window)"/>
+    <g stroke="#0b1322" stroke-width="7" opacity=".75">
+      <path d="M500 182v532M358 400h284M358 540h284M429 196v518M571 196v518"/>
+    </g>
+  </g>
+
+  <!-- Light falling from the window onto the floor. -->
+  <path d="M358 714h284l190 486H168z" fill="url(#ab-beam)"/>
+
+  <!-- Cross, small, centred in the light. -->
+  <path d="M488 470h24v70h46v24h-46v150h-24V564h-46v-24h46z" fill="#fbf1dc" opacity=".92"/>
+
+  <!-- Pews in silhouette. -->
+  <g fill="#0b1322" opacity=".92">
+    <rect x="90" y="880" width="360" height="26" rx="8"/>
+    <rect x="550" y="880" width="360" height="26" rx="8"/>
+    <rect x="60" y="960" width="390" height="28" rx="8"/>
+    <rect x="550" y="960" width="390" height="28" rx="8"/>
+    <rect x="20" y="1050" width="420" height="30" rx="8"/>
+    <rect x="560" y="1050" width="420" height="30" rx="8"/>
+    <rect x="-20" y="1150" width="450" height="32" rx="8"/>
+    <rect x="570" y="1150" width="450" height="32" rx="8"/>
+  </g>
+
+  <!-- Candle stands along the aisle. -->
+  <g fill="#e0ac4c">
+    <circle cx="470" cy="852" r="6"/><circle cx="530" cy="852" r="6"/>
+    <circle cx="462" cy="936" r="6"/><circle cx="538" cy="936" r="6"/>
+    <circle cx="452" cy="1030" r="7"/><circle cx="548" cy="1030" r="7"/>
+  </g>
+  <rect width="1000" height="1200" fill="#0b1322" opacity=".2"/>
+</svg>

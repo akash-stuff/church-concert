@@ -20,11 +20,16 @@ function cookieOptions(maxAgeMs) {
 }
 
 const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+// "Keep me signed in" on the staff console. Long enough to cover a run of
+// rehearsals and a concert without re-authenticating, short enough that a
+// shared church-office machine does not stay signed in indefinitely.
+const REMEMBERED = 14 * 24 * 60 * 60 * 1000;
 
-function sign(payload) {
+function sign(payload, overrides = {}) {
   return jwt.sign(payload, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn,
     issuer: 'church-concert',
+    ...overrides,
   });
 }
 
@@ -33,9 +38,16 @@ function issueUserSession(res, user) {
   res.cookie(USER_COOKIE, token, cookieOptions(TWELVE_HOURS));
 }
 
-function issueAdminSession(res, admin) {
-  const token = sign({ sub: admin.id, kind: 'admin', role: admin.role, tv: admin.token_version });
-  res.cookie(ADMIN_COOKIE, token, cookieOptions(TWELVE_HOURS));
+function issueAdminSession(res, admin, { remember = false } = {}) {
+  const lifetime = remember ? REMEMBERED : TWELVE_HOURS;
+  // The JWT's own expiry has to match the cookie's, or "remember me" would hand
+  // back a cookie that outlives the token inside it and sign the admin out
+  // anyway — the failure would look like a bug in the session, not the box.
+  const token = sign(
+    { sub: admin.id, kind: 'admin', role: admin.role, tv: admin.token_version },
+    { expiresIn: Math.floor(lifetime / 1000) },
+  );
+  res.cookie(ADMIN_COOKIE, token, cookieOptions(lifetime));
 }
 
 function clearUserSession(res) {

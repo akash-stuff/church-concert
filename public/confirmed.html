@@ -26,16 +26,9 @@
         <div class="notice" data-notice></div>
 
         <div class="card">
-          <img
-            src="/assets/icons/check.svg"
-            alt=""
-            aria-hidden="true"
-            width="44"
-            height="44"
-            style="width: 2.75rem; height: 2.75rem; margin-bottom: 0.75rem"
-          />
+          <div class="success-mark" aria-hidden="true"></div>
           <p class="eyebrow">Booking successful</p>
-          <h1 style="margin-bottom: 0.25rem" data-headline>Your seats are reserved</h1>
+          <h1 class="mb-xs" data-headline>Your seats are reserved</h1>
           <p class="muted">
             A WhatsApp message with these details is on its way. Show the reference at the door.
           </p>
@@ -44,7 +37,7 @@
 
           <dl class="detail" data-booking-detail></dl>
 
-          <div class="btn-row" style="margin-top: 1.5rem">
+          <div class="btn-row mt-lg">
             <a class="btn btn--primary" href="/api/bookings/mine/confirmation" target="_blank" rel="noopener" data-print-link>
               Print confirmation
             </a>
@@ -54,7 +47,7 @@
 
         <div class="card">
           <h3>On the night</h3>
-          <p class="muted" style="margin: 0">
+          <p class="muted m-0">
             Arrive 20 minutes early so stewards can seat you without rushing. Everyone in your
             party comes in under this one reference. If any of you can no longer come, release
             those seats from your dashboard so somebody else can have them.

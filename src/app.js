@@ -53,6 +53,19 @@ app.use((req, res, next) => {
   next();
 });
 
+// Concert posters arrive as a base64 data URI, which does not fit the 100kb
+// limit every other endpoint is held to. Parsing it here, before the general
+// parser, is what gives it a larger allowance: body-parser marks the request as
+// read, so the parser below sees it is done and passes it through. The path is
+// matched exactly, so nothing else inherits the bigger limit.
+const posterJson = express.json({ limit: '3mb' });
+app.use((req, res, next) => {
+  if (req.method === 'POST' && /^\/api\/admin\/concerts\/\d+\/poster$/.test(req.path)) {
+    return posterJson(req, res, next);
+  }
+  return next();
+});
+
 // Keep the raw body so the WhatsApp webhook signature can be verified.
 app.use(
   express.json({

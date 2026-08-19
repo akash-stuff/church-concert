@@ -101,6 +101,9 @@ function showFieldErrors(form, details = {}) {
     node.textContent = '';
   });
   $$('[name]', form).forEach((input) => input.removeAttribute('aria-invalid'));
+  $$('.field__control--invalid', form).forEach((node) =>
+    node.classList.remove('field__control--invalid'),
+  );
 
   let first = null;
   for (const [field, message] of Object.entries(details)) {
@@ -109,10 +112,58 @@ function showFieldErrors(form, details = {}) {
     const input = form.elements[field];
     if (input && input.setAttribute) {
       input.setAttribute('aria-invalid', 'true');
+      // Tints the leading mark red alongside the border.
+      input.closest('.field__control')?.classList.add('field__control--invalid');
       if (!first) first = input;
     }
   }
   if (first) first.focus();
+}
+
+// --- Field enhancement ----------------------------------------------------
+
+/**
+ * Mount a show/hide control on every password box, and clear the invalid tint
+ * as soon as someone starts correcting the field. Both are done here rather
+ * than per page so a new form gets them for free by using .field__control.
+ */
+function enhanceFields(scope = document) {
+  $$('.field__control > input[type="password"]', scope).forEach((input) => {
+    if (input.dataset.revealMounted) return;
+    input.dataset.revealMounted = '1';
+
+    const toggle = el('button', {
+      type: 'button',
+      class: 'field__reveal',
+      'aria-pressed': 'false',
+      'aria-label': 'Show password',
+      title: 'Show password',
+    });
+    toggle.addEventListener('click', () => {
+      const shown = input.type === 'text';
+      input.type = shown ? 'password' : 'text';
+      toggle.setAttribute('aria-pressed', String(!shown));
+      const label = shown ? 'Show password' : 'Hide password';
+      toggle.setAttribute('aria-label', label);
+      toggle.setAttribute('title', label);
+      input.focus();
+    });
+    input.after(toggle);
+  });
+
+  $$('.field__control', scope).forEach((control) => {
+    if (control.dataset.clearMounted) return;
+    control.dataset.clearMounted = '1';
+    control.addEventListener('input', () => {
+      control.classList.remove('field__control--invalid');
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => enhanceFields());
+} else {
+  enhanceFields();
 }
 
 function formValues(form) {
@@ -135,6 +186,9 @@ function busy(button, isBusy, busyLabel = 'Working…') {
     button.disabled = true;
   } else {
     if (button.dataset.label) button.textContent = button.dataset.label;
+    // Clearing it, not just reading it: the attribute is what drives the
+    // spinner in the stylesheet, so a stale one leaves the button spinning.
+    delete button.dataset.label;
     button.disabled = false;
   }
 }
@@ -363,6 +417,7 @@ window.CC = {
   notify,
   clearNotice,
   showFieldErrors,
+  enhanceFields,
   formValues,
   busy,
   formatDate,

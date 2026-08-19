@@ -5,9 +5,17 @@ screen without a second file, weigh a few kilobytes each, and carry no external
 requests, which matters because the Content-Security-Policy in `src/app.js`
 allows images from `'self'` and `data:` only.
 
-Colours here are hard-coded to the palette in `public/css/app.css`. If the brand
-blue changes, these files change with it — that is the trade for keeping the
-artwork as flat files rather than inline markup.
+Colours in the larger artwork are hard-coded to the palette in
+`public/css/app.css`. If the brand colour changes, those files change with it —
+that is the trade for keeping the artwork as flat files rather than inline
+markup.
+
+The icons in `icons/` are the exception. They are drawn with
+`stroke="currentColor"` and used as CSS **masks** rather than images, so the
+stylesheet decides their colour: a field's mark is grey at rest, indigo while
+the field has focus, red when the field is invalid, all from one file. Anything
+new in `icons/` should follow the same rule — 24×24 viewBox, `currentColor`,
+1.8 stroke — so it can be tinted the same way.
 
 | File | Where it is used |
 | --- | --- |
@@ -19,7 +27,7 @@ artwork as flat files rather than inline markup.
 | `church.svg` | Fixed page decoration on the sign-in, register, recovery, verify and 404 pages |
 | `sprig.svg` | The other half of that decoration, bottom left |
 | `crowd.svg` | Welcome banner on the attendee dashboard |
-| `icons/*.svg` | 24px line icons used as CSS backgrounds: `calendar`, `clock` and `pin` label the hero details; `pin` also marks a concert card's venue; `check` heads the booking confirmation. `seat`, `ticket`, `shield`, `users`, `whatsapp` and `info` are spare stock for future screens. |
+| `icons/*.svg` | 24px line icons. `calendar`, `clock` and `pin` label the hero details as CSS backgrounds; `pin` also marks a concert card's venue. The rest are masks: `check` draws `.success-mark` on the confirmation page, `chevron` the arrow on every custom select, `eye`/`eye-off` the password reveal, and `user`, `mail`, `phone`, `whatsapp`, `lock`, `key`, `home`, `identity`, `lifebuoy`, `shield`, `calendar`, `clock`, `pin`, `seat`, `ticket`, `note`, `music`, `users` the leading marks inside form fields (`.field__icon[data-icon="…"]`). `search` and `info` are spare stock. |
 
 ## Adding an image
 

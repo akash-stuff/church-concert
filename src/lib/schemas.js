@@ -37,6 +37,14 @@ const isoDate = z
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the format YYYY-MM-DD.');
 
+/** Accepts true/false, "true"/"false", 1/0 and "1"/"0". */
+const booleanish = z.union([
+  z.boolean(),
+  z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1'),
+  z.literal(1).transform(() => true),
+  z.literal(0).transform(() => false),
+]);
+
 const registerSchema = z.object({
   full_name: trimmed(2, 120),
   email,
@@ -61,6 +69,9 @@ const loginSchema = z.object({
 const adminLoginSchema = z.object({
   email,
   password: z.string().min(1).max(200),
+  // booleanish, not z.coerce.boolean(): an unchecked box posts "false", and
+  // coerce would read that string as true.
+  remember: booleanish.optional(),
 });
 
 const verifyWhatsappSchema = z.object({
@@ -101,14 +112,6 @@ const seatIdList = z
   .min(1, 'Choose at least one seat.')
   .max(25, 'That is more than 25 seats in one booking.');
 
-/** Accepts true/false, "true"/"false", 1/0 and "1"/"0". */
-const booleanish = z.union([
-  z.boolean(),
-  z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1'),
-  z.literal(1).transform(() => true),
-  z.literal(0).transform(() => false),
-]);
-
 const createBookingSchema = z
   .object({
     concert_id: z.coerce.number().int().positive().optional(),
@@ -130,6 +133,19 @@ const createBookingSchema = z
 const concertSchema = z.object({
   name: trimmed(2, 190).optional(),
   description: z.string().trim().max(5000).nullish(),
+  // A path under /assets, never a URL. Uploads set this themselves through
+  // /concerts/:id/poster; this entry is for picking one of the bundled posters,
+  // so the pattern is deliberately narrow — no scheme, no traversal, no
+  // anything the browser would fetch off-origin.
+  poster_path: z
+    .string()
+    .trim()
+    .regex(
+      /^\/assets\/posters\/[A-Za-z0-9._/-]{1,180}\.(svg|png|jpg|jpeg|webp)$/,
+      'Choose one of the bundled posters, or upload an image.',
+    )
+    .refine((value) => !value.includes('..'), 'Invalid poster path.')
+    .nullish(),
   event_date: isoDate.optional(),
   start_time: z
     .string()

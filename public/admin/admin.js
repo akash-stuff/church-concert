@@ -1,6 +1,13 @@
+/* The staff console.
+ *
+ * One page, eight panels, no router — the sidebar swaps which panel is visible
+ * and the hash keeps that survivable across a reload. Each panel loads its own
+ * data the first time it is opened and caches it until something invalidates it,
+ * so switching back and forth does not re-query the server.
+ */
 'use strict';
 
-(async function initAdmin() {
+(function initConsole() {
   const {
     api,
     $,
@@ -13,1125 +20,2775 @@
     busy,
     formatDate,
     formatShortDate,
-    pillFor,
-    renderSeatMap,
+    formatTime,
+    enhanceFields,
   } = window.CC;
 
-  // --- Session --------------------------------------------------------------
-  let admin;
-  try {
-    admin = (await api('/api/admin/me')).admin;
-  } catch {
-    window.location.href = '/admin/login.html';
-    return;
-  }
-  $('[data-admin-name]').textContent = `${admin.full_name} · ${admin.role.replace('_', ' ').toLowerCase()}`;
+  const UI = window.UI;
 
-  $('[data-signout]').addEventListener('click', async (event) => {
-    event.preventDefault();
+  // ==========================================================================
+  // State
+  // ==========================================================================
+
+  const state = {
+    admin: null,
+    concerts: [],
+    concertId: null,
+    tab: 'overview',
+    settings: {},
+    loaded: {},
+    seat: { map: null, zoom: 1, zone: 'all', selected: null, search: '' },
+    bookings: { page: 1, search: '', status: '', concert: '', whatsapp: '' },
+    users: { page: 1, search: '', status: '', verified: '', booked: '' },
+    notif: { page: 1, category: 'ALL' },
+    reports: { days: 90, concertId: '' },
+    chartDays: 30,
+    concertView: 'cards',
+  };
+
+  const PANELS = {
+    overview: { title: 'Overview', crumb: 'Overview' },
+    concerts: { title: 'Concerts', crumb: 'Concerts' },
+    seats: { title: 'Seat Management', crumb: 'Seat Management' },
+    bookings: { title: 'Bookings', crumb: 'Bookings' },
+    attendees: { title: 'Attendees', crumb: 'Attendees' },
+    notifications: { title: 'Notifications', crumb: 'Notifications' },
+    reports: { title: 'Reports & Export', crumb: 'Reports & Export' },
+    settings: { title: 'Settings', crumb: 'Settings' },
+  };
+
+  // The bundled posters, used when a concert has none of its own. Chosen by id
+  // rather than at random so a concert keeps the same picture between reloads.
+  const POSTERS = [
+    '/assets/posters/choir-night.svg',
+    '/assets/posters/carols.svg',
+    '/assets/posters/strings.svg',
+    '/assets/posters/organ-recital.svg',
+    '/assets/posters/gospel-evening.svg',
+  ];
+  const posterFor = (concert) =>
+    concert.poster_path || POSTERS[(Number(concert.id) || 0) % POSTERS.length];
+
+  // ==========================================================================
+  // Small helpers
+  // ==========================================================================
+
+  /** Point a masked icon element at its SVG. Via CSSOM, which the CSP allows. */
+  function paintIcon(node, name, property) {
+    node.style.setProperty(property, `url('/assets/icons/${name}.svg')`);
+  }
+
+  function paintAllIcons(scope = document) {
+    $$('[data-nav-icon]', scope).forEach((n) => paintIcon(n, n.dataset.navIcon, '--nav-icon'));
+    $$('[data-btn-icon]', scope).forEach((n) => paintIcon(n, n.dataset.btnIcon, '--btn-icon'));
+    $$('[data-kpi-icon]', scope).forEach((n) => paintIcon(n, n.dataset.kpiIcon, '--kpi-icon'));
+    $$('[data-meta-icon]', scope).forEach((n) => paintIcon(n, n.dataset.metaIcon, '--meta-icon'));
+    $$('[data-notif-icon]', scope).forEach((n) => paintIcon(n, n.dataset.notifIcon, '--notif-icon'));
+    $$('[data-export-icon]', scope).forEach((n) => paintIcon(n, n.dataset.exportIcon, '--export-icon'));
+    $$('[data-icon-var]', scope).forEach((n) => {
+      const target = n.querySelector('.export-card__icon');
+      if (target) paintIcon(target, n.dataset.iconVar, '--export-icon');
+    });
+  }
+
+  const initials = (name) =>
+    String(name || '?')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase() || '?';
+
+  function greeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  /** "3 minutes ago", falling back to a date once it stops being useful. */
+  function relativeTime(value) {
+    const then = new Date(value);
+    if (Number.isNaN(then.getTime())) return '—';
+    const seconds = Math.round((Date.now() - then.getTime()) / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return formatShortDate(value);
+  }
+
+  const statusChip = (status) => {
+    const tone = {
+      CONFIRMED: 'ok',
+      PENDING: 'wait',
+      CANCELLED: 'off',
+      EXPIRED: 'neutral',
+      AVAILABLE: 'ok',
+      BOOKED: 'neutral',
+      RESERVED: 'wait',
+      DISABLED: 'off',
+      SENT: 'ok',
+      DELIVERED: 'ok',
+      READ: 'ok',
+      QUEUED: 'wait',
+      FAILED: 'off',
+    }[status];
+    const label = { DISABLED: 'BLOCKED' }[status] || status || '—';
+    return el('span', { class: `chip chip--${tone || 'neutral'}`, text: label });
+  };
+
+  const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+
+  function occupancyTone(percent) {
+    if (percent >= 100) return 'occupancy--full';
+    if (percent >= 80) return 'occupancy--high';
+    return '';
+  }
+
+  /** Report a failed request once, in the way that suits where it happened. */
+  function fail(error, context) {
+    if (error?.status === 401) {
+      window.location.href = '/admin/login.html';
+      return;
+    }
+    console.error(`[console] ${context}:`, error);
+    UI.toastError(context, error?.message || 'Something went wrong.');
+  }
+
+  const setWidth = (node, percent) => {
+    node.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  };
+
+  // ==========================================================================
+  // Shell: navigation, sidebar, search, bell
+  // ==========================================================================
+
+  function setTab(tab, { push = true } = {}) {
+    if (!PANELS[tab]) tab = 'overview';
+    state.tab = tab;
+
+    $$('[data-panel]').forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tab;
+    });
+    $$('.sidebar__link').forEach((link) => {
+      const active = link.dataset.tab === tab;
+      link.setAttribute('aria-selected', String(active));
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+
+    $('[data-topbar-title]').textContent = PANELS[tab].title;
+    const crumb = $('[data-breadcrumb]');
+    crumb.textContent = '';
+    crumb.append(
+      el('li', {}, [el('a', { href: '#overview', text: 'Console' })]),
+      el('li', { 'aria-current': 'page', text: PANELS[tab].crumb }),
+    );
+
+    if (push && window.location.hash !== `#${tab}`) window.location.hash = tab;
+    $('[data-console]').removeAttribute('data-mobile-nav');
+    $('[data-mobile-toggle]').setAttribute('aria-expanded', 'false');
+
+    load(tab);
+  }
+
+  function mountShell() {
+    paintAllIcons();
+
+    $$('.sidebar__link').forEach((link) => {
+      link.addEventListener('click', () => setTab(link.dataset.tab));
+    });
+    $$('[data-goto]').forEach((node) => {
+      node.addEventListener('click', () => setTab(node.dataset.goto));
+    });
+
+    // Collapse is remembered: a staff member who wants the narrow rail wants it
+    // every time, not once per session.
+    const console_ = $('[data-console]');
+    const stored = localStorage.getItem('cc:sidebar');
+    if (stored === 'collapsed') {
+      console_.dataset.sidebar = 'collapsed';
+      $('[data-collapse]').setAttribute('aria-expanded', 'false');
+    }
+    $('[data-collapse]').addEventListener('click', () => {
+      const collapsed = console_.dataset.sidebar === 'collapsed';
+      console_.dataset.sidebar = collapsed ? 'expanded' : 'collapsed';
+      $('[data-collapse]').setAttribute('aria-expanded', String(collapsed));
+      localStorage.setItem('cc:sidebar', collapsed ? 'expanded' : 'collapsed');
+    });
+
+    $('[data-mobile-toggle]').addEventListener('click', () => {
+      const open = console_.dataset.mobileNav === 'open';
+      if (open) console_.removeAttribute('data-mobile-nav');
+      else console_.dataset.mobileNav = 'open';
+      $('[data-mobile-toggle]').setAttribute('aria-expanded', String(!open));
+    });
+
+    $('[data-bell]').addEventListener('click', () => setTab('notifications'));
+    $('[data-account]').addEventListener('click', accountMenu);
+
+    // Global search hands off to whichever panel can answer it.
+    const search = $('[data-global-search]');
+    search.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      const term = search.value.trim();
+      if (!term) return;
+      state.bookings = { ...state.bookings, search: term, page: 1 };
+      $('[data-booking-search]').value = term;
+      state.loaded.bookings = false;
+      setTab('bookings');
+    });
+
+    window.addEventListener('hashchange', () => {
+      const tab = window.location.hash.replace('#', '');
+      if (tab && tab !== state.tab) setTab(tab, { push: false });
+    });
+  }
+
+  async function accountMenu() {
+    const ok = await UI.confirm({
+      title: 'Sign out?',
+      message: `You are signed in as ${state.admin?.full_name || 'an administrator'}. Signing out ends this session on this device.`,
+      confirmLabel: 'Sign out',
+    });
+    if (!ok) return;
     await api('/api/auth/admin/logout', { method: 'POST' }).catch(() => {});
     window.location.href = '/admin/login.html';
-  });
-
-  const fail = (error) => notify('[data-notice]', error.message, 'error');
-  const done = (message) => notify('[data-notice]', message, 'success');
-
-  // --- Concert scope --------------------------------------------------------
-  // Several concerts can run at once, so every panel below is read against the
-  // one chosen here rather than against an assumed single event.
-  let concerts = [];
-  let concertId = null;
-
-  /** `?concert_id=` for the current scope, or '' when scoped to all concerts. */
-  const scope = (leading = '?') => (concertId ? `${leading}concert_id=${concertId}` : '');
-
-  const currentConcert = () => concerts.find((item) => item.id === concertId) || null;
-
-  async function loadConcertPicker({ keepSelection = true } = {}) {
-    const data = await api('/api/admin/concerts');
-    concerts = data.concerts;
-
-    if (!keepSelection || !concerts.some((item) => item.id === concertId)) {
-      // Default to the next concert that has not happened yet.
-      const today = new Date().toISOString().slice(0, 10);
-      concertId =
-        (concerts.find((item) => String(item.event_date).slice(0, 10) >= today) || concerts[0])?.id ??
-        null;
-    }
-
-    const picker = $('[data-concert-picker]');
-    picker.textContent = '';
-    for (const item of concerts) {
-      picker.append(
-        el('option', {
-          value: String(item.id),
-          text: `${item.name} · ${String(item.event_date).slice(0, 10)}${item.is_active ? '' : ' (off)'}`,
-        }),
-      );
-    }
-    picker.append(el('option', { value: '', text: 'All concerts (export only)' }));
-    picker.value = concertId === null ? '' : String(concertId);
   }
 
-  $('[data-concert-picker]').addEventListener('change', (event) => {
-    concertId = event.currentTarget.value ? Number(event.currentTarget.value) : null;
-    const active = $$('[data-tab]').find((b) => b.getAttribute('aria-selected') === 'true');
-    showTab(active?.dataset.tab || 'overview');
-  });
+  async function refreshUnread() {
+    try {
+      const { unread } = await api('/api/admin/console-notifications/unread-count');
+      for (const node of [$('[data-bell-count]'), $('[data-nav-unread]')]) {
+        node.dataset.count = String(unread);
+        node.textContent = unread > 99 ? '99+' : String(unread);
+      }
+    } catch {
+      /* the badge is not worth a toast */
+    }
+  }
 
-  // --- Tabs -----------------------------------------------------------------
-  const loaders = {
+  // ==========================================================================
+  // Panel loading
+  // ==========================================================================
+
+  const LOADERS = {
     overview: loadOverview,
-    users: loadUsers,
-    bookings: loadBookings,
+    concerts: loadConcerts,
     seats: loadSeats,
-    concert: loadConcert,
-    export: loadExport,
+    bookings: loadBookings,
+    attendees: loadUsers,
     notifications: loadNotifications,
+    reports: loadReports,
     settings: loadSettings,
   };
 
-  function showTab(name) {
-    $$('[data-tab]').forEach((button) =>
-      button.setAttribute('aria-selected', String(button.dataset.tab === name)),
-    );
-    $$('[data-panel]').forEach((panel) => {
-      panel.hidden = panel.dataset.panel !== name;
+  function load(tab, { force = false } = {}) {
+    if (!force && state.loaded[tab]) return;
+    state.loaded[tab] = true;
+    LOADERS[tab]?.().catch((error) => {
+      state.loaded[tab] = false;
+      fail(error, `Could not load ${PANELS[tab].title}`);
     });
-    window.location.hash = name;
-    clearNotice('[data-notice]');
-    loaders[name]?.().catch(fail);
   }
 
-  $$('[data-tab]').forEach((button) =>
-    button.addEventListener('click', () => showTab(button.dataset.tab)),
-  );
-
-  const emptyRow = (columns, message) =>
-    el('tr', {}, el('td', { colspan: columns, class: 'table-empty', text: message }));
-
-  function paginate(container, pagination, reload) {
-    container.textContent = '';
-    const { page, per_page: perPage, total } = pagination;
-    const pages = Math.max(1, Math.ceil(total / perPage));
-    container.append(el('span', { text: `${total} total · page ${page} of ${pages}` }));
-    const buttons = el('div', { class: 'btn-row' });
-    buttons.append(
-      el('button', {
-        class: 'btn btn--ghost btn--small',
-        type: 'button',
-        text: 'Previous',
-        disabled: page <= 1,
-        onclick: () => reload(page - 1),
-      }),
-      el('button', {
-        class: 'btn btn--ghost btn--small',
-        type: 'button',
-        text: 'Next',
-        disabled: page >= pages,
-        onclick: () => reload(page + 1),
-      }),
-    );
-    container.append(buttons);
+  /**
+   * Bind once, however many times a panel reloads.
+   *
+   * Loaders re-run whenever something invalidates their panel, and a listener
+   * added inside a loader would stack up: after three reloads a single keypress
+   * in a search box would fire three renders. This keeps a record of what has
+   * already been wired.
+   */
+  const bound = new Set();
+  function once(key, bind) {
+    if (bound.has(key)) return;
+    bound.add(key);
+    bind();
   }
+
+  const invalidate = (...tabs) => {
+    for (const tab of tabs) state.loaded[tab] = false;
+  };
 
   // ==========================================================================
   // Overview
   // ==========================================================================
-  async function loadOverview() {
-    const data = await api(`/api/admin/overview${scope()}`);
-    const { stats, concert } = data;
 
-    $('[data-concert-title]').textContent = concert.name;
-    $('[data-concert-line]').textContent =
-      `${formatDate(concert.event_date)} · ${concert.venue}`;
+  function kpiCard({ label, value, icon, meta, delta, rail, feature }) {
+    const card = el('article', { class: `kpi${feature ? ' kpi--feature' : ''}` }, [
+      el('div', { class: 'kpi__top' }, [
+        el('p', { class: 'kpi__label', text: label }),
+        el('span', { class: 'kpi__icon', 'data-kpi-icon': icon, 'aria-hidden': 'true' }),
+      ]),
+      el('p', { class: 'kpi__value', text: String(value) }),
+    ]);
 
-    const figures = [
-      ['Total capacity', stats.max_capacity, ''],
-      ['Registered users', stats.registered_users, ''],
-      ['WhatsApp verified', stats.whatsapp_verified_users, 'figure--verdigris'],
-      ['Booked seats', stats.booked_seats, 'figure--ruby'],
-      ['Available seats', stats.available_seats, ''],
-      ['Remaining capacity', stats.remaining_capacity, ''],
-      ['Held seats', stats.reserved_seats, 'figure--ruby'],
-      ['Total seats', stats.total_seats, ''],
-    ];
-    const box = $('[data-figures]');
-    box.textContent = '';
-    for (const [label, value, variant] of figures) {
-      box.append(
-        el('div', { class: `figure ${variant}`.trim() }, [
-          el('div', { class: 'figure__value', text: String(value) }),
-          el('div', { class: 'figure__label', text: label }),
-        ]),
-      );
-    }
-
-    if (stats.fully_booked) {
-      notify(
-        '[data-notice]',
-        'Fully booked: no more seats can be taken. Raise the capacity or release a seat to reopen booking.',
-        'warn',
-      );
-    } else if (data.failed_notifications > 0) {
-      notify(
-        '[data-notice]',
-        `${data.failed_notifications} WhatsApp messages failed to send. Open Notifications to see why.`,
-        'warn',
-      );
-    }
-
-    const body = $('[data-recent-bookings]');
-    body.textContent = '';
-    if (!data.recent_bookings.length) {
-      body.append(emptyRow(5, 'No bookings yet.'));
-    } else {
-      for (const booking of data.recent_bookings) {
-        body.append(
-          el('tr', {}, [
-            el('td', { class: 'num', text: booking.booking_reference }),
-            el('td', { text: booking.full_name }),
-            el('td', { class: 'num', text: booking.seat_number }),
-            el('td', {}, pillFor(booking.status)),
-            el('td', { text: formatShortDate(booking.created_at) }),
-          ]),
+    if (meta || delta) {
+      const row = el('div', { class: 'kpi__meta' });
+      if (delta) {
+        row.append(
+          el('span', {
+            class: `kpi__delta kpi__delta--${delta.direction}`,
+            text: delta.label,
+          }),
         );
       }
+      if (meta) row.append(el('span', { text: meta }));
+      card.append(row);
     }
+
+    if (rail !== undefined) {
+      const fill = el('i');
+      const rails = el('div', { class: 'kpi__rail' }, [fill]);
+      card.append(rails);
+      requestAnimationFrame(() => setWidth(fill, rail));
+    }
+
+    paintAllIcons(card);
+    return card;
   }
 
-  $('[data-refresh-overview]').addEventListener('click', () => loadOverview().catch(fail));
+  async function loadOverview() {
+    $('[data-greeting]').textContent = `${greeting()}${state.admin ? `, ${state.admin.full_name.split(' ')[0]}` : ''}`;
 
-  // ==========================================================================
-  // Users
-  // ==========================================================================
-  async function loadUsers(page = 1) {
-    const params = new URLSearchParams({ page: String(page) });
-    const search = $('[data-user-search]').value.trim();
-    if (search) params.set('search', search);
-    for (const [key, selector] of [
-      ['status', '[data-user-status]'],
-      ['verified', '[data-user-verified]'],
-      ['booked', '[data-user-booked]'],
-    ]) {
-      const value = $(selector).value;
-      if (value) params.set(key, value);
+    const kpis = $('[data-kpis]');
+    UI.skeleton(kpis, { kind: 'kpi', count: 5 });
+
+    const [analytics, upcoming] = await Promise.all([
+      api('/api/admin/analytics/concerts'),
+      api('/api/admin/analytics/summary?days=30'),
+    ]);
+
+    const concerts = analytics.concerts;
+    const live = concerts.filter((c) => c.is_active);
+    const totals = concerts.reduce(
+      (acc, c) => ({
+        capacity: acc.capacity + Number(c.max_capacity || 0),
+        booked: acc.booked + c.booked_seats,
+        available: acc.available + c.available_seats,
+        parties: acc.parties + c.parties,
+        seats: acc.seats + c.total_seats,
+        reserved: acc.reserved + c.reserved_seats,
+        blocked: acc.blocked + c.blocked_seats,
+      }),
+      { capacity: 0, booked: 0, available: 0, parties: 0, seats: 0, reserved: 0, blocked: 0 },
+    );
+
+    const occupancy = pct(totals.booked, totals.capacity);
+
+    kpis.textContent = '';
+    kpis.append(
+      kpiCard({
+        label: 'Total concerts',
+        value: concerts.length,
+        icon: 'music',
+        meta: `${live.length} active`,
+      }),
+      kpiCard({
+        label: 'Total bookings',
+        value: totals.parties,
+        icon: 'ticket',
+        meta: 'parties holding seats',
+        delta: {
+          direction: upcoming.bookings.parties > 0 ? 'up' : 'flat',
+          label: `${upcoming.bookings.parties} in 30d`,
+        },
+      }),
+      kpiCard({
+        label: 'Seats reserved',
+        value: totals.booked,
+        icon: 'seat',
+        meta: `of ${totals.capacity} capacity`,
+        rail: occupancy,
+      }),
+      kpiCard({
+        label: 'Available seats',
+        value: totals.available,
+        icon: 'check',
+        meta: `${totals.blocked} blocked · ${totals.reserved} held`,
+      }),
+      kpiCard({
+        label: 'Occupancy',
+        value: `${occupancy}%`,
+        icon: 'gauge',
+        feature: true,
+        meta: 'across every concert',
+        rail: occupancy,
+        delta: {
+          direction: occupancy >= 80 ? 'up' : occupancy >= 40 ? 'flat' : 'down',
+          label: occupancy >= 80 ? 'Filling up' : occupancy >= 40 ? 'Steady' : 'Room to fill',
+        },
+      }),
+    );
+
+    $('[data-overview-lede]').textContent =
+      concerts.length === 0
+        ? 'No concerts yet. Create one to start taking seat reservations.'
+        : `${live.length} active ${live.length === 1 ? 'concert' : 'concerts'}, ${totals.booked} of ${totals.capacity} seats reserved.`;
+
+    await Promise.all([
+      drawBookingChart(),
+      drawOccupancy($('[data-occupancy-chart]'), totals),
+      drawUpcoming(concerts),
+      drawRecentBookings(),
+    ]);
+
+    once('overview:range', () => {
+      $$('[data-range]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.chartDays = Number(button.dataset.range);
+          $$('[data-range]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          drawBookingChart().catch((error) => fail(error, 'Could not redraw the chart'));
+        });
+      });
+    });
+  }
+
+  async function drawBookingChart() {
+    const box = $('[data-bookings-chart]');
+    UI.skeleton(box, { kind: 'chart', count: 1 });
+    const { series } = await api(`/api/admin/analytics/bookings?days=${state.chartDays}`);
+    UI.lineChart(box, series, [
+      { key: 'seats', label: 'Seats' },
+      { key: 'bookings', label: 'Bookings', accent: true },
+    ]);
+  }
+
+  function drawOccupancy(box, totals) {
+    UI.stackChart(box, [
+      { label: 'Booked', value: totals.booked, tone: 'booked' },
+      { label: 'Available', value: totals.available, tone: 'available' },
+      { label: 'Held', value: totals.reserved, tone: 'reserved' },
+      { label: 'Blocked', value: totals.blocked, tone: 'blocked' },
+    ]);
+  }
+
+  function concertTile(concert) {
+    const occupancy = concert.occupancy ?? pct(concert.booked_seats, concert.max_capacity);
+    const status = !concert.is_active
+      ? { label: 'Archived', tone: 'neutral' }
+      : occupancy >= 100
+        ? { label: 'Fully booked', tone: 'off' }
+        : new Date(concert.event_date) < new Date()
+          ? { label: 'Past', tone: 'neutral' }
+          : { label: 'On sale', tone: 'ok' };
+
+    const fill = el('i');
+    const tile = el('article', { class: 'concert-tile' }, [
+      el('div', { class: 'concert-tile__poster' }, [
+        el('img', {
+          src: posterFor(concert),
+          alt: '',
+          loading: 'lazy',
+          width: 800,
+          height: 450,
+        }),
+        el('span', { class: `chip chip--${status.tone} concert-tile__badge`, text: status.label }),
+        el('span', { class: 'concert-tile__date' }, [
+          el('strong', { text: formatDate(concert.event_date) }),
+          el('span', { text: formatTime(concert.start_time) }),
+        ]),
+      ]),
+      el('div', { class: 'concert-tile__body' }, [
+        el('h3', { class: 'concert-tile__title', text: concert.name }),
+        el('ul', { class: 'concert-tile__meta' }, [
+          el('li', {}, [
+            el('i', { 'data-meta-icon': 'pin', 'aria-hidden': 'true' }),
+            concert.venue || 'Venue to be confirmed',
+          ]),
+          el('li', {}, [
+            el('i', { 'data-meta-icon': 'seat', 'aria-hidden': 'true' }),
+            `${concert.total_seats} seats laid out · capacity ${concert.max_capacity}`,
+          ]),
+        ]),
+        el('div', { class: `occupancy ${occupancyTone(occupancy)}` }, [
+          el('div', { class: 'occupancy__top' }, [
+            el('span', { text: 'Occupancy' }),
+            el('span', { class: 'occupancy__value', text: `${occupancy}%` }),
+          ]),
+          el('div', { class: 'occupancy__rail' }, [fill]),
+          el('div', { class: 'occupancy__split' }, [
+            el('span', {}, [el('strong', { text: String(concert.booked_seats) }), 'Booked']),
+            el('span', {}, [el('strong', { text: String(concert.available_seats) }), 'Available']),
+            el('span', {}, [el('strong', { text: String(concert.parties) }), 'Parties']),
+          ]),
+        ]),
+      ]),
+      el('div', { class: 'concert-tile__actions' }, [
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'View',
+          onClick: () => showConcert(concert),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'Edit',
+          onClick: () => editConcert(concert),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'Seats',
+          onClick: () => {
+            state.concertId = concert.id;
+            state.seat.map = null;
+            invalidate('seats');
+            setTab('seats');
+          },
+        }),
+      ]),
+    ]);
+
+    requestAnimationFrame(() => setWidth(fill, occupancy));
+    paintAllIcons(tile);
+    return tile;
+  }
+
+  function drawUpcoming(concerts) {
+    const box = $('[data-upcoming]');
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = concerts
+      .filter((c) => c.is_active && String(c.event_date).slice(0, 10) >= today)
+      .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))
+      .slice(0, 3);
+
+    box.textContent = '';
+    if (!upcoming.length) {
+      UI.empty(box, {
+        title: 'No concerts coming up',
+        message: 'Create a concert to open seat reservations.',
+        icon: 'music',
+        action: { label: 'Create concert', onClick: () => createConcert() },
+      });
+      return;
+    }
+    for (const concert of upcoming) box.append(concertTile(concert));
+  }
+
+  async function drawRecentBookings() {
+    const box = $('[data-recent-bookings]');
+    UI.skeleton(box, { kind: 'row', count: 5 });
+    const { bookings } = await api('/api/admin/bookings?per_page=8');
+
+    if (!bookings.length) {
+      UI.empty(box, {
+        title: 'No bookings yet',
+        message: 'Reservations will appear here as they come in.',
+        icon: 'ticket',
+      });
+      return;
     }
 
-    const data = await api(`/api/admin/users?${params}`);
-    const body = $('[data-users]');
-    body.textContent = '';
+    box.textContent = '';
+    box.append(
+      bookingsTable(bookings, {
+        columns: ['ref', 'customer', 'concert', 'seats', 'status', 'date'],
+      }),
+    );
+  }
 
-    if (!data.users.length) {
-      body.append(emptyRow(7, 'No users match that search.'));
+  // ==========================================================================
+  // Concerts
+  // ==========================================================================
+
+  async function loadConcerts() {
+    const box = $('[data-concerts-view]');
+    UI.skeleton(box, { kind: 'tile', count: 2 });
+
+    const { concerts } = await api('/api/admin/analytics/concerts');
+    state.concerts = concerts;
+    fillConcertPickers(concerts);
+    renderConcerts();
+
+    once('concerts:filters', () => {
+      const rerender = () => renderConcerts();
+      $('[data-concert-search]').addEventListener('input', rerender);
+      $('[data-concert-when]').addEventListener('change', rerender);
+      $('[data-concert-status]').addEventListener('change', rerender);
+      $$('[data-view]').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.concertView = button.dataset.view;
+          $$('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+          renderConcerts();
+        });
+      });
+    });
+  }
+
+  function filteredConcerts() {
+    const term = ($('[data-concert-search]')?.value || '').trim().toLowerCase();
+    const when = $('[data-concert-when]')?.value || 'all';
+    const status = $('[data-concert-status]')?.value || 'all';
+    const today = new Date().toISOString().slice(0, 10);
+
+    return state.concerts.filter((concert) => {
+      if (term && !`${concert.name} ${concert.venue}`.toLowerCase().includes(term)) return false;
+      const date = String(concert.event_date).slice(0, 10);
+      if (when === 'upcoming' && date < today) return false;
+      if (when === 'past' && date >= today) return false;
+      if (status === 'active' && !concert.is_active) return false;
+      if (status === 'archived' && concert.is_active) return false;
+      if (status === 'full' && concert.occupancy < 100) return false;
+      return true;
+    });
+  }
+
+  function renderConcerts() {
+    const box = $('[data-concerts-view]');
+    const list = filteredConcerts();
+    box.textContent = '';
+
+    if (!list.length) {
+      UI.empty(box, {
+        title: 'No concerts match',
+        message: 'Try a different search or clear the filters.',
+        icon: 'music',
+        action: { label: 'Create concert', onClick: () => createConcert() },
+      });
+      return;
     }
 
-    for (const user of data.users) {
+    if (state.concertView === 'cards') {
+      const grid = el('div', { class: 'concert-grid' });
+      for (const concert of list) grid.append(concertTile(concert));
+      box.append(grid);
+      return;
+    }
+
+    const body = el('tbody');
+    for (const concert of list) {
+      const fill = el('i');
       body.append(
         el('tr', {}, [
           el('td', {}, [
-            el('strong', { text: user.full_name }),
-            el('div', { class: 'muted', style: 'font-size:0.75rem', text: user.email }),
+            el('span', { class: 'data-table__strong', text: concert.name }),
+            el('span', { class: 'data-table__sub', text: concert.venue || '—' }),
           ]),
-          el('td', { class: 'num' }, [
-            el('div', { text: user.mobile_number }),
-            el('div', { class: 'muted', style: 'font-size:0.75rem', text: user.whatsapp_number }),
-          ]),
-          el('td', { class: 'num', text: String(user.age) }),
-          el('td', {}, pillFor(user.whatsapp_verified ? 'Verified' : 'Not verified')),
-          el('td', { class: 'num', text: user.seat_number || '—' }),
-          el('td', {}, pillFor(user.is_active ? 'Active' : 'Disabled')),
           el('td', {}, [
-            el('div', { class: 'btn-row' }, [
-              el('button', {
-                class: 'btn btn--ghost btn--small',
-                type: 'button',
-                text: 'View',
-                onclick: () => showUser(user.id),
-              }),
-              el('button', {
-                class: user.is_active ? 'btn btn--danger btn--small' : 'btn btn--ghost btn--small',
-                type: 'button',
-                text: user.is_active ? 'Disable' : 'Enable',
-                onclick: () => toggleUser(user, page),
-              }),
+            formatDate(concert.event_date),
+            el('span', { class: 'data-table__sub', text: formatTime(concert.start_time) }),
+          ]),
+          el('td', { class: 'u-tabular', text: String(concert.max_capacity) }),
+          el('td', { class: 'u-tabular', text: String(concert.booked_seats) }),
+          el('td', { class: 'u-tabular', text: String(concert.available_seats) }),
+          el('td', {}, [
+            el('div', { class: `occupancy ${occupancyTone(concert.occupancy)}` }, [
+              el('div', { class: 'occupancy__top' }, [
+                el('span', { class: 'occupancy__value', text: `${concert.occupancy}%` }),
+              ]),
+              el('div', { class: 'occupancy__rail' }, [fill]),
+            ]),
+          ]),
+          el('td', {}, [statusChip(concert.is_active ? 'CONFIRMED' : 'EXPIRED')]),
+          el('td', {}, [
+            el('div', { class: 'data-table__actions' }, [
+              iconButton('eye-view', 'View concert', () => showConcert(concert)),
+              iconButton('edit', 'Edit concert', () => editConcert(concert)),
+              iconButton('copy', 'Duplicate concert', () => duplicateConcert(concert)),
+              iconButton('archive', concert.is_active ? 'Archive concert' : 'Restore concert', () =>
+                archiveConcert(concert),
+              ),
             ]),
           ]),
         ]),
       );
+      requestAnimationFrame(() => setWidth(fill, concert.occupancy));
     }
 
-    // The pill helper defaults to neutral for words it does not know; recolour
-    // the status pills so they read at a glance.
-    $$('[data-users] .pill').forEach((pill) => {
-      if (pill.textContent === 'Verified' || pill.textContent === 'Active') {
-        pill.className = 'pill pill--ok';
-      } else if (pill.textContent === 'Not verified') {
-        pill.className = 'pill pill--wait';
-      } else if (pill.textContent === 'Disabled') {
-        pill.className = 'pill pill--off';
-      }
+    box.append(
+      el('div', { class: 'data-table-wrap' }, [
+        el('table', { class: 'data-table' }, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { text: 'Concert' }),
+              el('th', { text: 'Date' }),
+              el('th', { text: 'Capacity' }),
+              el('th', { text: 'Booked' }),
+              el('th', { text: 'Available' }),
+              el('th', { text: 'Occupancy' }),
+              el('th', { text: 'Status' }),
+              el('th', { text: '' }),
+            ]),
+          ]),
+          body,
+        ]),
+      ]),
+    );
+  }
+
+  function iconButton(icon, label, onClick) {
+    const button = el('button', {
+      class: 'btn btn--quiet btn--icon',
+      type: 'button',
+      'aria-label': label,
+      title: label,
+      onClick,
+    });
+    const glyph = el('span', { class: 'btn__icon', 'data-btn-icon': icon, 'aria-hidden': 'true' });
+    button.append(glyph);
+    paintIcon(glyph, icon, '--btn-icon');
+    return button;
+  }
+
+  function showConcert(concert) {
+    UI.drawer({
+      title: concert.name,
+      subtitle: `${formatDate(concert.event_date)} · ${formatTime(concert.start_time)}`,
+      render(body) {
+        const fill = el('i');
+        body.append(
+          el('img', {
+            src: posterFor(concert),
+            alt: '',
+            width: 800,
+            height: 450,
+            class: 'poster',
+          }),
+          el('dl', { class: 'facts', style: null }, [
+            fact('Venue', concert.venue || '—'),
+            fact('Capacity', String(concert.max_capacity)),
+            fact('Seats laid out', String(concert.total_seats)),
+            fact('Booked', `${concert.booked_seats} across ${concert.parties} parties`),
+            fact('Available', String(concert.available_seats)),
+            fact('Held', String(concert.reserved_seats)),
+            fact('Blocked', String(concert.blocked_seats)),
+            fact('Cancellations', String(concert.cancellations)),
+          ]),
+          el('div', { class: `occupancy ${occupancyTone(concert.occupancy)}` }, [
+            el('div', { class: 'occupancy__top' }, [
+              el('span', { text: 'Occupancy' }),
+              el('span', { class: 'occupancy__value', text: `${concert.occupancy}%` }),
+            ]),
+            el('div', { class: 'occupancy__rail' }, [fill]),
+          ]),
+        );
+        requestAnimationFrame(() => setWidth(fill, concert.occupancy));
+      },
+      actions: [
+        {
+          label: 'Manage seats',
+          variant: 'primary',
+          onClick: ({ close }) => {
+            close();
+            state.concertId = concert.id;
+            state.seat.map = null;
+            invalidate('seats');
+            setTab('seats');
+          },
+        },
+        { label: 'Edit', onClick: ({ close }) => (close(), editConcert(concert)) },
+      ],
+    });
+  }
+
+  const fact = (term, value) => el('div', {}, [el('dt', { text: term }), el('dd', { text: value })]);
+
+  // --- Concert create / edit ------------------------------------------------
+
+  function concertForm(concert = {}) {
+    const form = el('form', { class: 'stack' });
+    const field = (id, label, input, hint) =>
+      el('div', { class: 'field' }, [
+        el('label', { for: id, text: label }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': inputIcon(id), 'aria-hidden': 'true' }),
+          input,
+          input.tagName === 'SELECT'
+            ? el('span', { class: 'field__chevron', 'aria-hidden': 'true' })
+            : null,
+        ]),
+        hint ? el('p', { class: 'field__hint', text: hint }) : null,
+        el('span', { class: 'field__error', 'data-error-for': input.name }),
+      ]);
+
+    const text = (name, value, attrs = {}) =>
+      el('input', { id: `cf_${name}`, name, value: value ?? '', ...attrs });
+
+    form.append(
+      field('cf_name', 'Concert name', text('name', concert.name, { type: 'text', required: true })),
+      field(
+        'cf_venue',
+        'Venue',
+        text('venue', concert.venue, { type: 'text', required: true }),
+      ),
+      el('div', { class: 'grid-3' }, [
+        field(
+          'cf_event_date',
+          'Date',
+          text('event_date', String(concert.event_date || '').slice(0, 10), {
+            type: 'date',
+            required: true,
+          }),
+        ),
+        field(
+          'cf_start_time',
+          'Start time',
+          text('start_time', String(concert.start_time || '').slice(0, 5), {
+            type: 'time',
+            required: true,
+          }),
+        ),
+        field(
+          'cf_max_capacity',
+          'Capacity',
+          text('max_capacity', concert.max_capacity ?? 100, { type: 'number', min: '1' }),
+        ),
+      ]),
+      field(
+        'cf_booking_ref_prefix',
+        'Reference prefix',
+        text('booking_ref_prefix', concert.booking_ref_prefix || 'CHC', {
+          type: 'text',
+          maxlength: '12',
+        }),
+        'Two to twelve uppercase letters or digits, used to number this concert’s bookings.',
+      ),
+    );
+    return form;
+  }
+
+  const inputIcon = (id) => {
+    if (id.includes('date')) return 'calendar';
+    if (id.includes('time')) return 'clock';
+    if (id.includes('venue')) return 'pin';
+    if (id.includes('capacity')) return 'users';
+    if (id.includes('prefix')) return 'ticket';
+    return 'music';
+  };
+
+  function createConcert() {
+    const form = concertForm();
+    UI.drawer({
+      title: 'Create concert',
+      subtitle: 'Seats are added afterwards, from Seat Management.',
+      render: (body) => {
+        body.append(form);
+        enhanceFields(body);
+      },
+      actions: [
+        { label: 'Cancel', onClick: ({ close }) => close() },
+        {
+          label: 'Create concert',
+          variant: 'primary',
+          onClick: async ({ close }) => {
+            try {
+              const values = formValues(form);
+              const { concert } = await api('/api/admin/concerts', {
+                method: 'POST',
+                body: values,
+              });
+              close();
+              UI.toastSuccess('Concert created', `${concert.name} is ready for seats.`);
+              invalidate('overview', 'concerts', 'seats', 'reports');
+              load(state.tab, { force: true });
+            } catch (error) {
+              if (error.details) showFieldErrors(form, error.details);
+              UI.toastError('Could not create the concert', error.message);
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  function editConcert(concert) {
+    const form = concertForm(concert);
+    UI.drawer({
+      title: 'Edit concert',
+      subtitle: concert.name,
+      render: (body) => {
+        body.append(form, posterPicker(concert));
+        enhanceFields(body);
+      },
+      actions: [
+        { label: 'Cancel', onClick: ({ close }) => close() },
+        {
+          label: 'Save changes',
+          variant: 'primary',
+          onClick: async ({ close }) => {
+            try {
+              await api(`/api/admin/concerts/${concert.id}`, {
+                method: 'PATCH',
+                body: formValues(form),
+              });
+              close();
+              UI.toastSuccess('Concert updated', concert.name);
+              invalidate('overview', 'concerts', 'reports');
+              load(state.tab, { force: true });
+            } catch (error) {
+              if (error.details) showFieldErrors(form, error.details);
+              UI.toastError('Could not save the concert', error.message);
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  /**
+   * Poster chooser: one of the bundled illustrations, or a photograph uploaded
+   * from disk. The upload is read here and posted as a data URI — the server
+   * decodes it, checks the type and size, and writes the file.
+   */
+  function posterPicker(concert) {
+    const preview = el('img', {
+      src: posterFor(concert),
+      alt: '',
+      width: 800,
+      height: 450,
+      class: 'poster',
     });
 
-    paginate($('[data-users-pagination]'), data.pagination, (p) => loadUsers(p).catch(fail));
-  }
+    const choose = async (path) => {
+      try {
+        await api(`/api/admin/concerts/${concert.id}`, {
+          method: 'PATCH',
+          body: { poster_path: path },
+        });
+        concert.poster_path = path;
+        preview.src = posterFor(concert);
+        UI.toastSuccess('Poster updated');
+        invalidate('overview', 'concerts');
+      } catch (error) {
+        UI.toastError('Could not set the poster', error.message);
+      }
+    };
 
-  async function toggleUser(user, page) {
-    const disabling = Boolean(user.is_active);
-    let reason = null;
-    if (disabling) {
-      reason = window.prompt(
-        `Disable ${user.full_name}? They will be signed out and cannot book. Reason (optional):`,
-        '',
-      );
-      if (reason === null) return;
-    }
-    try {
-      await api(`/api/admin/users/${user.id}`, {
-        method: 'PATCH',
-        body: { is_active: !disabling, disabled_reason: reason || null },
+    const file = el('input', {
+      type: 'file',
+      accept: 'image/png,image/jpeg,image/webp',
+      id: 'poster-file',
+      class: 'visually-hidden',
+    });
+    file.addEventListener('change', async () => {
+      const chosen = file.files?.[0];
+      if (!chosen) return;
+      if (chosen.size > 2 * 1024 * 1024) {
+        UI.toastError('That image is too large', 'Posters must be 2 MB or smaller.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const { poster_path: path } = await api(`/api/admin/concerts/${concert.id}/poster`, {
+            method: 'POST',
+            body: { image: reader.result },
+          });
+          concert.poster_path = path;
+          preview.src = path;
+          UI.toastSuccess('Poster uploaded');
+          invalidate('overview', 'concerts');
+        } catch (error) {
+          UI.toastError('Could not upload the poster', error.message);
+        }
+      };
+      reader.readAsDataURL(chosen);
+    });
+
+    const thumbs = el('div', { class: 'grid-3' });
+    for (const path of POSTERS) {
+      const button = el('button', {
+        type: 'button',
+        class: 'poster-choice',
+        'aria-label': `Use the ${path.split('/').pop().replace('.svg', '').replace('-', ' ')} artwork`,
+        onClick: () => choose(path),
       });
-      done(`${user.full_name} is now ${disabling ? 'disabled' : 'active'}.`);
-      await loadUsers(page);
+      button.append(el('img', { src: path, alt: '', width: 800, height: 450 }));
+      thumbs.append(button);
+    }
+
+    return el('div', { class: 'stack' }, [
+      el('h3', { text: 'Poster' }),
+      preview,
+      el('div', { class: 'u-flex' }, [
+        el('label', { class: 'btn btn--ghost btn--small', for: 'poster-file', text: 'Upload a photo' }),
+        file,
+        el('button', {
+          type: 'button',
+          class: 'btn btn--quiet btn--small',
+          text: 'Use bundled artwork',
+          onClick: () => choose(POSTERS[(Number(concert.id) || 0) % POSTERS.length]),
+        }),
+      ]),
+      el('p', { class: 'field__hint', text: 'PNG, JPEG or WebP, up to 2 MB. Or pick one of these:' }),
+      thumbs,
+    ]);
+  }
+
+  async function duplicateConcert(concert) {
+    const ok = await UI.confirm({
+      title: 'Duplicate this concert?',
+      message: `A copy of "${concert.name}" will be created with its sections and seats, but no bookings.`,
+      confirmLabel: 'Duplicate',
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/concerts/${concert.id}/duplicate`, { method: 'POST', body: {} });
+      UI.toastSuccess('Concert duplicated');
+      invalidate('overview', 'concerts', 'reports');
+      load(state.tab, { force: true });
     } catch (error) {
-      fail(error);
+      UI.toastError('Could not duplicate the concert', error.message);
     }
   }
 
-  async function showUser(id) {
-    const panel = $('[data-user-detail]');
-    panel.hidden = false;
-    panel.textContent = 'Loading…';
+  async function archiveConcert(concert) {
+    const archiving = concert.is_active;
+    const ok = await UI.confirm({
+      title: archiving ? 'Archive this concert?' : 'Restore this concert?',
+      message: archiving
+        ? `"${concert.name}" will stop accepting new bookings and disappear from the public site. Existing bookings are untouched.`
+        : `"${concert.name}" will be listed publicly again.`,
+      confirmLabel: archiving ? 'Archive' : 'Restore',
+      danger: archiving,
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/concerts/${concert.id}`, {
+        method: 'PATCH',
+        body: { is_active: !archiving },
+      });
+      UI.toastSuccess(archiving ? 'Concert archived' : 'Concert restored', concert.name);
+      invalidate('overview', 'concerts', 'reports');
+      load(state.tab, { force: true });
+    } catch (error) {
+      UI.toastError('Could not update the concert', error.message);
+    }
+  }
 
-    const data = await api(`/api/admin/users/${id}`);
-    const user = data.user;
-    panel.textContent = '';
+  // ==========================================================================
+  // Seat management
+  // ==========================================================================
 
-    panel.append(
-      el('div', { class: 'card__head', style: 'padding:0 0 1rem;margin-bottom:1rem' }, [
-        el('h2', { text: user.full_name, style: 'margin:0' }),
+  function fillConcertPickers(concerts) {
+    if (!state.concertId && concerts.length) {
+      const today = new Date().toISOString().slice(0, 10);
+      const next = concerts.find((c) => c.is_active && String(c.event_date).slice(0, 10) >= today);
+      state.concertId = (next || concerts[0]).id;
+    }
+
+    const seatPicker = $('[data-seat-concert]');
+    if (seatPicker) {
+      seatPicker.textContent = '';
+      for (const concert of concerts) {
+        seatPicker.append(
+          el('option', {
+            value: concert.id,
+            text: `${concert.name} — ${formatDate(concert.event_date)}`,
+            selected: concert.id === state.concertId,
+          }),
+        );
+      }
+    }
+
+    for (const selector of ['[data-booking-concert]', '[data-report-concert]']) {
+      const picker = $(selector);
+      if (!picker) continue;
+      const current = picker.value;
+      picker.textContent = '';
+      picker.append(el('option', { value: '', text: 'All concerts' }));
+      for (const concert of concerts) {
+        picker.append(el('option', { value: concert.id, text: concert.name }));
+      }
+      picker.value = current;
+    }
+  }
+
+  async function loadSeats() {
+    if (!state.concerts.length) {
+      const { concerts } = await api('/api/admin/analytics/concerts');
+      state.concerts = concerts;
+      fillConcertPickers(concerts);
+    }
+    if (!state.concertId) {
+      UI.empty($('[data-viewport]'), {
+        title: 'No concert to lay out',
+        message: 'Create a concert first, then add sections and seats to it.',
+        icon: 'music',
+        action: { label: 'Create concert', onClick: () => createConcert() },
+      });
+      return;
+    }
+
+    await refreshSeatMap();
+
+    once('seats:controls', () => {
+    $('[data-seat-concert]').addEventListener('change', (event) => {
+      state.concertId = Number(event.target.value);
+      state.seat.selected = null;
+      refreshSeatMap().catch((error) => fail(error, 'Could not load the seat map'));
+    });
+    $('[data-seat-zone]').addEventListener('change', (event) => {
+      state.seat.zone = event.target.value;
+      renderSeatMap();
+    });
+    $('[data-seat-search]').addEventListener('input', (event) => {
+      state.seat.search = event.target.value.trim().toUpperCase();
+      renderSeatMap();
+    });
+    $$('[data-zoom]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.zoom;
+        if (mode === 'reset') state.seat.zoom = 1;
+        if (mode === 'in') state.seat.zoom = Math.min(1.8, state.seat.zoom + 0.15);
+        if (mode === 'out') state.seat.zoom = Math.max(0.55, state.seat.zoom - 0.15);
+        applyZoom();
+      });
+    });
+    $('[data-action="refresh-seats"]').addEventListener('click', () => {
+      refreshSeatMap().then(() => UI.toast('Seat map refreshed')).catch((e) => fail(e, 'Refresh failed'));
+    });
+    $('[data-action="add-section"]').addEventListener('click', addSection);
+    $('[data-action="add-seats"]').addEventListener('click', addSeats);
+    });
+  }
+
+  function applyZoom() {
+    $('[data-viewport]').style.transform = `scale(${state.seat.zoom})`;
+    $('[data-zoom-level]').textContent = `${Math.round(state.seat.zoom * 100)}%`;
+  }
+
+  async function refreshSeatMap() {
+    const viewport = $('[data-viewport]');
+    UI.skeleton(viewport, { kind: 'chart', count: 1 });
+    const data = await api(`/api/admin/seats?concert_id=${state.concertId}`);
+    state.seat.map = data;
+
+    const zone = $('[data-seat-zone]');
+    const current = zone.value;
+    zone.textContent = '';
+    zone.append(el('option', { value: 'all', text: 'All sections' }));
+    for (const section of data.sections) {
+      zone.append(el('option', { value: String(section.id), text: section.name }));
+    }
+    zone.value = current && [...zone.options].some((o) => o.value === current) ? current : 'all';
+    state.seat.zone = zone.value;
+
+    renderSeatStats();
+    renderSeatMap();
+    renderSeatLegend();
+    renderInspector();
+  }
+
+  function allSeats() {
+    return (state.seat.map?.sections || []).flatMap((section) =>
+      section.seats.map((seat) => ({ ...seat, section_name: section.name, section_id: section.id })),
+    );
+  }
+
+  function renderSeatStats() {
+    const seats = allSeats();
+    const count = (status) => seats.filter((s) => s.status === status).length;
+    const stats = [
+      { label: 'Total seats', value: seats.length, tone: 'accent' },
+      { label: 'Available', value: count('AVAILABLE'), tone: 'available' },
+      { label: 'Reserved', value: count('RESERVED'), tone: 'reserved' },
+      { label: 'Booked', value: count('BOOKED'), tone: 'booked' },
+      { label: 'Blocked', value: count('DISABLED'), tone: 'blocked' },
+    ];
+
+    const box = $('[data-seat-stats]');
+    box.textContent = '';
+    for (const stat of stats) {
+      const card = el('div', { class: 'seat-stat' }, [
+        el('div', { class: 'seat-stat__value', text: String(stat.value) }),
+        el('div', { class: 'seat-stat__label', text: stat.label }),
+      ]);
+      card.style.setProperty('--seat-swatch', `var(--${toneVar(stat.tone)})`);
+      box.append(card);
+    }
+  }
+
+  const toneVar = (tone) =>
+    ({ available: 'ok', reserved: 'warn', booked: 'brand', blocked: 'line-strong', accent: 'accent' })[
+      tone
+    ] || 'line-strong';
+
+  /**
+   * The auditorium. Seats are grouped into rows by their row_label where one
+   * exists, falling back to the letters at the front of the seat number, so a
+   * layout created with plain "A01…A20" numbering still draws as rows.
+   */
+  function renderSeatMap() {
+    const viewport = $('[data-viewport]');
+    viewport.textContent = '';
+    const map = state.seat.map;
+    if (!map) return;
+
+    viewport.append(el('div', { class: 'auditorium__stage', text: 'Stage' }));
+
+    const sections = map.sections.filter(
+      (section) => state.seat.zone === 'all' || String(section.id) === state.seat.zone,
+    );
+
+    if (!sections.length || !sections.some((s) => s.seats.length)) {
+      UI.empty(viewport, {
+        title: 'No seats laid out yet',
+        message: 'Add a section, then add a run of seats to it.',
+        icon: 'seat',
+        action: { label: 'Add section', onClick: addSection },
+      });
+      return;
+    }
+
+    for (const section of sections) {
+      const zone = el('div', { class: `zone ${zoneModifier(section.name)}` }, [
+        el('div', { class: 'zone__head' }, [
+          el('span', { class: 'zone__name', text: section.name }),
+          el('span', { class: 'zone__rule' }),
+          el('span', {
+            class: 'zone__count',
+            text: `${section.seats.filter((s) => s.status === 'AVAILABLE').length} of ${section.seats.length} free`,
+          }),
+        ]),
+      ]);
+
+      const rows = new Map();
+      for (const seat of section.seats) {
+        const key = seat.row_label || String(seat.seat_number).replace(/[0-9].*$/, '') || '—';
+        if (!rows.has(key)) rows.set(key, []);
+        rows.get(key).push(seat);
+      }
+
+      for (const [label, seats] of rows) {
+        const strip = el('div', { class: 'seat-row__seats' });
+        for (const seat of seats) {
+          strip.append(seatButton(seat, section));
+        }
+        zone.append(
+          el('div', { class: 'seat-row' }, [
+            el('span', { class: 'seat-row__label', text: label }),
+            strip,
+          ]),
+        );
+      }
+
+      viewport.append(zone);
+    }
+    applyZoom();
+  }
+
+  const zoneModifier = (name) => (/vip|premium/i.test(name) ? 'zone--vip' : '');
+
+  function seatButton(seat, section) {
+    const matches =
+      state.seat.search && String(seat.seat_number).toUpperCase().includes(state.seat.search);
+    const vip = /vip|premium/i.test(section.name);
+
+    const button = el('button', {
+      type: 'button',
+      class: `pseat${vip ? ' pseat--vip' : ''}`,
+      'data-status': seat.status,
+      'data-seat-id': seat.id,
+      'aria-pressed': String(state.seat.selected?.id === seat.id),
+      'aria-label': `Seat ${seat.seat_number}, ${section.name}, ${seat.status === 'DISABLED' ? 'blocked' : seat.status.toLowerCase()}`,
+      title: seat.note || `Seat ${seat.seat_number}`,
+      text: seat.seat_number,
+      onClick: () => selectSeat({ ...seat, section_name: section.name, section_id: section.id }),
+    });
+
+    // A search match is outlined rather than recoloured, so it does not collide
+    // with the status colours already in play.
+    if (matches) button.style.outline = '2px solid var(--accent)';
+    return button;
+  }
+
+  function selectSeat(seat) {
+    state.seat.selected = seat;
+    $$('.pseat').forEach((node) =>
+      node.setAttribute('aria-pressed', String(Number(node.dataset.seatId) === seat.id)),
+    );
+    renderInspector();
+  }
+
+  function renderSeatLegend() {
+    const box = $('[data-seat-legend]');
+    box.textContent = '';
+    const keys = [
+      ['AVAILABLE', 'Available'],
+      ['BOOKED', 'Booked'],
+      ['RESERVED', 'Reserved'],
+      ['DISABLED', 'Blocked'],
+    ];
+    for (const [status, label] of keys) {
+      box.append(
+        el('span', { class: 'seat-legend__key' }, [
+          el('span', { class: 'pseat', 'data-status': status, 'aria-hidden': 'true' }),
+          label,
+        ]),
+      );
+    }
+    box.append(
+      el('span', { class: 'seat-legend__key' }, [
+        el('span', { class: 'pseat', 'aria-pressed': 'true', 'aria-hidden': 'true' }),
+        'Selected',
+      ]),
+    );
+  }
+
+  function renderInspector() {
+    const box = $('[data-inspector-body]');
+    const seat = state.seat.selected;
+    box.textContent = '';
+
+    if (!seat) {
+      UI.empty(box, {
+        title: 'No seat selected',
+        message: 'Click any seat on the plan to see who holds it and what you can do.',
+        icon: 'seat',
+      });
+      return;
+    }
+
+    const booking = seat.booking || null;
+    box.append(
+      el('dl', { class: 'facts facts--stacked' }, [
+        fact('Seat', seat.seat_number),
+        fact('Section', seat.section_name),
+        fact('Admission', 'Free'),
+      ]),
+      el('div', { class: 'u-flex' }, [statusChip(seat.status)]),
+    );
+
+    if (booking) {
+      box.append(
+        el('h3', { text: 'Held by' }),
+        el('dl', { class: 'facts facts--stacked' }, [
+          fact('Attendee', booking.full_name || '—'),
+          fact('Email', booking.email || '—'),
+          fact('Reference', booking.booking_reference || '—'),
+          fact('Booked', booking.created_at ? formatShortDate(booking.created_at) : '—'),
+        ]),
+      );
+    } else if (seat.note) {
+      box.append(el('p', { class: 'muted', text: seat.note }));
+    }
+
+    const actions = el('div', { class: 'u-flex' });
+    if (booking) {
+      actions.append(
         el('button', {
           class: 'btn btn--ghost btn--small',
           type: 'button',
-          text: 'Close',
-          onclick: () => {
-            panel.hidden = true;
+          text: 'Open booking',
+          onClick: () => {
+            state.bookings = { ...state.bookings, search: booking.booking_reference, page: 1 };
+            $('[data-booking-search]').value = booking.booking_reference;
+            invalidate('bookings');
+            setTab('bookings');
           },
         }),
-      ]),
-    );
-
-    const list = el('dl', { class: 'detail' });
-    for (const [label, value] of [
-      ['Email', user.email],
-      ['Mobile', user.mobile_number],
-      ['WhatsApp', user.whatsapp_number],
-      ['WhatsApp verified', user.whatsapp_verified ? formatShortDate(user.whatsapp_verified_at) : 'No'],
-      ['Date of birth', formatDate(user.date_of_birth)],
-      ['Age', String(user.age)],
-      ['Gender', String(user.gender).replace(/_/g, ' ').toLowerCase()],
-      ['Address', user.address],
-      ['Emergency contact', user.emergency_contact],
-      ['Terms accepted', formatShortDate(user.terms_accepted_at)],
-      ['Account', user.is_active ? 'Active' : `Disabled — ${user.disabled_reason || 'no reason given'}`],
-      ['Registered', formatShortDate(user.created_at)],
-      ['Last sign-in', user.last_login_at ? formatShortDate(user.last_login_at) : 'Never'],
-    ]) {
-      list.append(el('dt', { text: label }), el('dd', { text: value || '—' }));
-    }
-    panel.append(list);
-
-    panel.append(el('h3', { text: 'Bookings', style: 'margin-top:1.5rem' }));
-    if (!data.bookings.length) {
-      panel.append(el('p', { class: 'muted', text: 'No bookings on this account.' }));
-    } else {
-      const table = el('table');
-      table.append(
-        el(
-          'thead',
-          {},
-          el('tr', {}, [
-            el('th', { text: 'Reference' }),
-            el('th', { text: 'Seat' }),
-            el('th', { text: 'Status' }),
-            el('th', { text: 'Created' }),
-          ]),
-        ),
+        el('button', {
+          class: 'btn btn--danger btn--small',
+          type: 'button',
+          text: 'Release seat',
+          onClick: () => releaseSeat(seat, booking),
+        }),
       );
-      const tbody = el('tbody');
-      for (const booking of data.bookings) {
-        tbody.append(
-          el('tr', {}, [
-            el('td', { class: 'num', text: booking.booking_reference }),
-            el('td', { class: 'num', text: booking.seat_number }),
-            el('td', {}, pillFor(booking.status)),
-            el('td', { text: formatShortDate(booking.created_at) }),
-          ]),
-        );
-      }
-      table.append(tbody);
-      panel.append(el('div', { class: 'table-scroll' }, table));
-    }
-
-    panel.append(el('h3', { text: 'Recent messages', style: 'margin-top:1.5rem' }));
-    if (!data.notifications.length) {
-      panel.append(el('p', { class: 'muted', text: 'Nothing sent yet.' }));
     } else {
-      const list2 = el('div', { class: 'table-scroll' });
-      const table = el('table');
-      const tbody = el('tbody');
-      for (const message of data.notifications) {
-        tbody.append(
-          el('tr', {}, [
-            el('td', { text: message.type.replace(/_/g, ' ').toLowerCase() }),
-            el('td', {}, pillFor(message.status)),
-            el('td', { text: message.failure_reason || formatShortDate(message.created_at) }),
-          ]),
-        );
-      }
-      table.append(tbody);
-      list2.append(table);
-      panel.append(list2);
+      actions.append(
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: seat.status === 'DISABLED' ? 'Unblock seat' : 'Block seat',
+          onClick: () => toggleBlocked(seat),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: seat.status === 'RESERVED' ? 'Release hold' : 'Hold seat',
+          onClick: () => toggleHold(seat),
+        }),
+      );
     }
-
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    box.append(actions);
   }
 
-  $('[data-user-search-go]').addEventListener('click', () => loadUsers(1).catch(fail));
-  $('[data-user-search]').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') loadUsers(1).catch(fail);
-  });
+  async function toggleBlocked(seat) {
+    const blocking = seat.status !== 'DISABLED';
+    try {
+      await api(`/api/admin/seats/${seat.id}`, {
+        method: 'PATCH',
+        body: { status: blocking ? 'DISABLED' : 'AVAILABLE' },
+      });
+      UI.toastSuccess(blocking ? `Seat ${seat.seat_number} blocked` : `Seat ${seat.seat_number} unblocked`);
+      invalidate('overview', 'concerts', 'reports');
+      await refreshSeatMap();
+    } catch (error) {
+      UI.toastError('Could not update the seat', error.message);
+    }
+  }
+
+  async function toggleHold(seat) {
+    const holding = seat.status !== 'RESERVED';
+    try {
+      await api(`/api/admin/seats/${seat.id}/${holding ? 'reserve' : 'release'}`, {
+        method: 'POST',
+        body: {},
+      });
+      UI.toastSuccess(holding ? `Seat ${seat.seat_number} held` : `Hold on ${seat.seat_number} released`);
+      invalidate('overview', 'concerts', 'reports');
+      await refreshSeatMap();
+    } catch (error) {
+      UI.toastError('Could not update the seat', error.message);
+    }
+  }
+
+  async function releaseSeat(seat, booking) {
+    const ok = await UI.confirm({
+      title: `Release seat ${seat.seat_number}?`,
+      message: `${booking.full_name || 'The attendee'} loses this seat and is sent a cancellation on WhatsApp. The rest of their party keeps their seats.`,
+      confirmLabel: 'Release seat',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/bookings/${booking.booking_id || booking.id}`, {
+        method: 'DELETE',
+        body: { reason: 'Released by staff from the seat map' },
+      });
+      UI.toastSuccess(`Seat ${seat.seat_number} released`);
+      invalidate('overview', 'bookings', 'concerts', 'reports');
+      state.seat.selected = null;
+      await refreshSeatMap();
+    } catch (error) {
+      UI.toastError('Could not release the seat', error.message);
+    }
+  }
+
+  function addSection() {
+    const form = el('form', {}, [
+      el('div', { class: 'field' }, [
+        el('label', { for: 'sec_name', text: 'Section name' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'seat', 'aria-hidden': 'true' }),
+          el('input', { id: 'sec_name', name: 'name', type: 'text', required: true, placeholder: 'VIP, Premium, General…' }),
+        ]),
+        el('p', { class: 'field__hint', text: 'A section named VIP or Premium is drawn with rounded seats on the plan.' }),
+        el('span', { class: 'field__error', 'data-error-for': 'name' }),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'sec_order', text: 'Display order' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'note', 'aria-hidden': 'true' }),
+          el('input', { id: 'sec_order', name: 'display_order', type: 'number', min: '0', value: '0' }),
+        ]),
+      ]),
+    ]);
+
+    UI.drawer({
+      title: 'Add a section',
+      subtitle: 'Sections are drawn front to back in display order.',
+      render: (body) => body.append(form),
+      actions: [
+        { label: 'Cancel', onClick: ({ close }) => close() },
+        {
+          label: 'Add section',
+          variant: 'primary',
+          onClick: async ({ close }) => {
+            try {
+              await api(`/api/admin/sections?concert_id=${state.concertId}`, {
+                method: 'POST',
+                body: { ...formValues(form), concert_id: state.concertId },
+              });
+              close();
+              UI.toastSuccess('Section added');
+              await refreshSeatMap();
+            } catch (error) {
+              if (error.details) showFieldErrors(form, error.details);
+              UI.toastError('Could not add the section', error.message);
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  function addSeats() {
+    const sections = state.seat.map?.sections || [];
+    if (!sections.length) {
+      UI.toastError('Add a section first', 'Seats belong to a section.');
+      return;
+    }
+
+    const picker = el('select', { id: 'bulk_section', name: 'section_id', required: true });
+    for (const section of sections) {
+      picker.append(el('option', { value: section.id, text: section.name }));
+    }
+
+    const form = el('form', {}, [
+      el('div', { class: 'field' }, [
+        el('label', { for: 'bulk_section', text: 'Section' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'seat', 'aria-hidden': 'true' }),
+          picker,
+          el('span', { class: 'field__chevron', 'aria-hidden': 'true' }),
+        ]),
+      ]),
+      el('div', { class: 'grid-3' }, [
+        numberField('bulk_prefix', 'prefix', 'Prefix', 'text', 'A'),
+        numberField('bulk_from', 'from', 'From', 'number', '1'),
+        numberField('bulk_to', 'to', 'To', 'number', '20'),
+      ]),
+      el('p', { class: 'field__hint', text: 'Prefix A, 1 to 20 creates A01 through A20.' }),
+    ]);
+
+    UI.drawer({
+      title: 'Add a run of seats',
+      subtitle: 'Numbers are zero-padded to two digits.',
+      render: (body) => body.append(form),
+      actions: [
+        { label: 'Cancel', onClick: ({ close }) => close() },
+        {
+          label: 'Add seats',
+          variant: 'primary',
+          onClick: async ({ close }) => {
+            try {
+              const result = await api(`/api/admin/seats/bulk?concert_id=${state.concertId}`, {
+                method: 'POST',
+                body: { ...formValues(form), concert_id: state.concertId },
+              });
+              close();
+              UI.toastSuccess('Seats added', result.message || '');
+              invalidate('overview', 'concerts', 'reports');
+              await refreshSeatMap();
+            } catch (error) {
+              if (error.details) showFieldErrors(form, error.details);
+              UI.toastError('Could not add the seats', error.message);
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  const numberField = (id, name, label, type, value) =>
+    el('div', { class: 'field' }, [
+      el('label', { for: id, text: label }),
+      el('span', { class: 'field__control field__control--inline' }, [
+        el('span', { class: 'field__icon', 'data-icon': 'ticket', 'aria-hidden': 'true' }),
+        el('input', { id, name, type, value, required: true }),
+      ]),
+      el('span', { class: 'field__error', 'data-error-for': name }),
+    ]);
 
   // ==========================================================================
   // Bookings
   // ==========================================================================
-  async function loadBookings(page = 1) {
-    const params = new URLSearchParams({ page: String(page) });
-    if (concertId) params.set('concert_id', String(concertId));
-    const search = $('[data-booking-search]').value.trim();
+
+  function bookingsTable(rows, { columns, onOpen } = {}) {
+    const show = new Set(columns || ['ref', 'customer', 'concert', 'seats', 'status', 'date', 'actions']);
+    const head = el('tr');
+    const headings = {
+      ref: 'Booking ID',
+      customer: 'Customer',
+      concert: 'Concert',
+      seats: 'Seats',
+      status: 'Status',
+      whatsapp: 'Ticket',
+      date: 'Booked',
+      actions: '',
+    };
+    for (const key of show) head.append(el('th', { text: headings[key] }));
+
+    const body = el('tbody');
+    for (const row of rows) {
+      const tr = el('tr', onOpen ? { 'data-clickable': 'true' } : {});
+      if (onOpen) {
+        tr.addEventListener('click', (event) => {
+          if (event.target.closest('button')) return;
+          onOpen(row);
+        });
+      }
+
+      const cells = {
+        ref: () => el('td', {}, [el('span', { class: 'data-table__ref', text: row.booking_reference })]),
+        customer: () =>
+          el('td', {}, [
+            el('div', { class: 'cell-person' }, [
+              el('span', { class: 'avatar', 'aria-hidden': 'true', text: initials(row.full_name) }),
+              el('div', {}, [
+                el('span', { class: 'data-table__strong', text: row.full_name || '—' }),
+                el('span', { class: 'data-table__sub', text: row.email || '—' }),
+              ]),
+            ]),
+          ]),
+        concert: () => el('td', { text: row.concert_name || currentConcertName(row) }),
+        seats: () =>
+          el('td', {}, [
+            el('span', { class: 'data-table__strong', text: row.seat_number || '—' }),
+            el('span', { class: 'data-table__sub', text: row.section_name || '' }),
+          ]),
+        status: () => el('td', {}, [statusChip(row.status)]),
+        whatsapp: () =>
+          el('td', {}, [
+            row.whatsapp_verified
+              ? el('span', { class: 'chip chip--ok', text: 'WhatsApp' })
+              : el('span', { class: 'chip chip--neutral', text: 'Unverified' }),
+          ]),
+        date: () => el('td', { class: 'u-nowrap', text: formatShortDate(row.created_at) }),
+        actions: () =>
+          el('td', {}, [
+            el('div', { class: 'data-table__actions' }, [
+              iconButton('eye-view', 'View booking', () => showBooking(row)),
+              iconButton('download', 'Download ticket', () => downloadTicket(row)),
+              iconButton('send', 'Resend confirmation', () => resendConfirmation(row)),
+              row.status === 'CONFIRMED' || row.status === 'PENDING'
+                ? iconButton('trash', 'Cancel booking', () => cancelBooking(row))
+                : null,
+            ]),
+          ]),
+      };
+
+      for (const key of show) tr.append(cells[key]());
+      body.append(tr);
+    }
+
+    return el('table', { class: 'data-table' }, [el('thead', {}, [head]), body]);
+  }
+
+  const currentConcertName = (row) =>
+    state.concerts.find((c) => c.id === row.concert_id)?.name || '—';
+
+  async function loadBookings() {
+    await renderBookings();
+
+    once('bookings:filters', () => {
+      const rerun = () => {
+        state.bookings.page = 1;
+        renderBookings().catch((error) => fail(error, 'Could not load bookings'));
+      };
+      $('[data-booking-search]').addEventListener('input', debounce(rerun, 300));
+      $('[data-booking-status]').addEventListener('change', rerun);
+      $('[data-booking-concert]').addEventListener('change', rerun);
+      $('[data-booking-whatsapp]').addEventListener('change', rerun);
+      $('[data-action="export-bookings"]').addEventListener('click', () => {
+        window.open('/api/admin/export/bookings.csv', '_blank', 'noopener');
+      });
+      $('[data-action="manual-booking"]').addEventListener('click', manualBooking);
+    });
+  }
+
+  async function renderBookings() {
+    const box = $('[data-bookings-table]');
+    UI.skeleton(box, { kind: 'row', count: 8 });
+
+    const params = new URLSearchParams({ page: String(state.bookings.page), per_page: '25' });
+    const search = $('[data-booking-search]')?.value.trim();
+    const status = $('[data-booking-status]')?.value;
     if (search) params.set('search', search);
-    const status = $('[data-booking-status]').value;
     if (status) params.set('status', status);
 
-    const data = await api(`/api/admin/bookings?${params}`);
-    const body = $('[data-bookings]');
-    body.textContent = '';
+    const { bookings, pagination } = await api(`/api/admin/bookings?${params}`);
 
-    if (!data.bookings.length) body.append(emptyRow(7, 'No bookings match that search.'));
+    // Concert and delivery filters are applied here rather than server-side:
+    // the endpoint does not take them, and the page size is small enough that
+    // filtering the page is honest as long as the pager reflects it.
+    const concertFilter = $('[data-booking-concert]')?.value;
+    const whatsappFilter = $('[data-booking-whatsapp]')?.value;
+    const rows = bookings.filter((row) => {
+      if (concertFilter && String(row.concert_id) !== concertFilter) return false;
+      if (whatsappFilter === 'verified' && !row.whatsapp_verified) return false;
+      if (whatsappFilter === 'unverified' && row.whatsapp_verified) return false;
+      return true;
+    });
 
-    for (const booking of data.bookings) {
-      const isActive = ['PENDING', 'CONFIRMED'].includes(booking.status);
-      body.append(
-        el('tr', {}, [
-          el('td', { class: 'num', text: booking.booking_reference }),
-          el('td', {}, [
-            el('strong', { text: booking.full_name }),
-            el('div', {
-              class: 'muted',
-              style: 'font-size:0.75rem',
-              text: `${booking.whatsapp_number}${booking.whatsapp_verified ? '' : ' (unverified)'}`,
-            }),
-          ]),
-          el('td', { class: 'num', text: `${booking.seat_number}` }),
-          el('td', {}, pillFor(booking.status)),
-          el('td', { text: booking.source.toLowerCase() }),
-          el('td', { text: formatShortDate(booking.created_at) }),
-          el('td', {}, [
-            isActive
-              ? el('div', { class: 'btn-row' }, [
-                  el('button', {
-                    class: 'btn btn--ghost btn--small',
-                    type: 'button',
-                    text: 'Move seat',
-                    onclick: () => reassign(booking, page),
-                  }),
-                  el('button', {
-                    class: 'btn btn--danger btn--small',
-                    type: 'button',
-                    text: 'Cancel',
-                    onclick: () => cancel(booking, page),
-                  }),
-                ])
-              : el('span', {
-                  class: 'muted',
-                  style: 'font-size:0.75rem',
-                  text: booking.cancel_reason || '—',
-                }),
-          ]),
-        ]),
-      );
-    }
-
-    paginate($('[data-bookings-pagination]'), data.pagination, (p) => loadBookings(p).catch(fail));
-  }
-
-  async function cancel(booking, page) {
-    const reason = window.prompt(
-      `Cancel ${booking.booking_reference} and release seat ${booking.seat_number}? Reason (optional):`,
-      '',
-    );
-    if (reason === null) return;
-    try {
-      const result = await api(`/api/admin/bookings/${booking.id}`, {
-        method: 'DELETE',
-        body: { reason: reason || null },
+    box.textContent = '';
+    if (!rows.length) {
+      UI.empty(box, {
+        title: 'No bookings match',
+        message: 'Try a different search, or clear the filters.',
+        icon: 'ticket',
       });
-      done(result.message);
-      await loadBookings(page);
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  async function reassign(booking, page) {
-    const { sections } = await api(`/api/admin/seats${scope()}`);
-    const options = sections
-      .flatMap((section) => section.seats)
-      .filter((seat) => seat.status !== 'DISABLED' && !seat.booking)
-      .map((seat) => seat.seat_number);
-
-    if (!options.length) {
-      notify('[data-notice]', 'There is no free seat to move this booking to.', 'warn');
-      return;
-    }
-
-    const answer = window.prompt(
-      `Move ${booking.booking_reference} from ${booking.seat_number}.\nFree seats: ${options.join(', ')}\n\nNew seat number:`,
-      options[0],
-    );
-    if (!answer) return;
-
-    const target = sections
-      .flatMap((section) => section.seats)
-      .find((seat) => seat.seat_number.toUpperCase() === answer.trim().toUpperCase());
-
-    if (!target) {
-      notify('[data-notice]', `There is no seat called ${answer.trim()}.`, 'error');
-      return;
-    }
-
-    try {
-      const result = await api(`/api/admin/bookings/${booking.id}`, {
-        method: 'PATCH',
-        body: { seat_id: target.id },
-      });
-      done(result.message);
-      await loadBookings(page);
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  $('[data-booking-search-go]').addEventListener('click', () => loadBookings(1).catch(fail));
-  $('[data-booking-search]').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') loadBookings(1).catch(fail);
-  });
-
-  // --- Manual booking ---
-  const manualPanel = $('[data-manual-form]');
-  $('[data-manual-booking]').addEventListener('click', async () => {
-    manualPanel.hidden = false;
-    try {
-      const [{ users }, { sections }] = await Promise.all([
-        api('/api/admin/users?per_page=100&booked=no&status=active'),
-        api(`/api/admin/seats${scope()}`),
-      ]);
-
-      const userSelect = $('#manual_user');
-      userSelect.textContent = '';
-      if (!users.length) {
-        userSelect.append(el('option', { value: '', text: 'Every active user already has a seat' }));
-      }
-      for (const user of users) {
-        userSelect.append(
-          el('option', {
-            value: String(user.id),
-            text: `${user.full_name} — ${user.email}${user.whatsapp_verified ? '' : ' (WhatsApp unverified)'}`,
-          }),
-        );
-      }
-
-      const seatSelect = $('#manual_seat');
-      seatSelect.textContent = '';
-      for (const section of sections) {
-        for (const seat of section.seats) {
-          if (seat.booking || seat.status === 'DISABLED') continue;
-          seatSelect.append(
-            el('option', {
-              value: String(seat.id),
-              text: `${seat.seat_number} — ${section.name}${seat.status === 'RESERVED' ? ' (held)' : ''}`,
-            }),
-          );
-        }
-      }
-      manualPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } catch (error) {
-      fail(error);
-    }
-  });
-
-  $('[data-manual-cancel]').addEventListener('click', () => {
-    manualPanel.hidden = true;
-  });
-
-  $('#manual-booking-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
-    busy(submit, true, 'Creating…');
-    try {
-      const result = await api('/api/admin/bookings', {
-        method: 'POST',
-        body: { ...formValues(form), concert_id: concertId },
-      });
-      done(`Created ${result.booking.booking_reference} on seat ${result.booking.seat_number}.`);
-      manualPanel.hidden = true;
-      form.reset();
-      await loadBookings(1);
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
-    }
-  });
-
-  // ==========================================================================
-  // Seats
-  // ==========================================================================
-  async function loadSeats() {
-    const data = await api(`/api/admin/seats${scope()}`);
-
-    const bulkSection = $('#bulk_section');
-    const current = bulkSection.value;
-    bulkSection.textContent = '';
-    for (const section of data.sections) {
-      bulkSection.append(el('option', { value: String(section.id), text: section.name }));
-    }
-    if (current) bulkSection.value = current;
-
-    const tools = $('[data-section-tools]');
-    tools.textContent = '';
-    for (const section of data.sections) {
-      tools.append(
-        el('button', {
-          class: 'btn btn--ghost btn--small',
-          type: 'button',
-          text: `Delete ${section.name}`,
-          onclick: () => deleteSection(section),
+    } else {
+      box.append(
+        bookingsTable(rows, {
+          columns: ['ref', 'customer', 'concert', 'seats', 'status', 'whatsapp', 'date', 'actions'],
+          onOpen: showBooking,
         }),
       );
     }
 
-    renderSeatMap($('[data-admin-seatmap]'), data.sections, {
-      renderActions: (seat) => {
-        const actions = el('div', { class: 'seat-actions' });
-        if (seat.booking) {
-          actions.append(
-            el('button', {
-              type: 'button',
-              text: 'release',
-              title: `Booked by ${seat.booking.occupant_name}. Releasing cancels that booking.`,
-              onclick: () => seatAction(seat, 'release'),
-            }),
-          );
-        } else if (seat.status === 'RESERVED') {
-          actions.append(
-            el('button', { type: 'button', text: 'free', onclick: () => seatAction(seat, 'release') }),
-          );
-        } else if (seat.status === 'DISABLED') {
-          actions.append(
-            el('button', { type: 'button', text: 'enable', onclick: () => setSeatStatus(seat, 'AVAILABLE') }),
-          );
-        } else {
-          actions.append(
-            el('button', { type: 'button', text: 'hold', onclick: () => seatAction(seat, 'reserve') }),
-            el('button', { type: 'button', text: 'off', onclick: () => setSeatStatus(seat, 'DISABLED') }),
-            el('button', { type: 'button', text: 'delete', onclick: () => deleteSeat(seat) }),
-          );
-        }
-        return actions;
-      },
+    renderPager($('[data-bookings-pager]'), pagination, rows.length, (page) => {
+      state.bookings.page = page;
+      renderBookings().catch((error) => fail(error, 'Could not load bookings'));
     });
+  }
 
-    // Name the occupant on booked seats so stewards can check the plan.
-    for (const section of data.sections) {
-      for (const seat of section.seats) {
-        if (!seat.booking) continue;
-        const node = $(`[data-seat-id="${seat.id}"]`, $('[data-admin-seatmap]'));
-        if (node) {
-          node.title = `${seat.seat_number} — ${seat.booking.occupant_name} (${seat.booking.reference})`;
-        }
+  function renderPager(box, pagination, shown, onPage) {
+    box.textContent = '';
+    const pages = Math.max(1, Math.ceil(pagination.total / pagination.per_page));
+    box.append(
+      el('span', {
+        text: `Showing ${shown} of ${pagination.total} · page ${pagination.page} of ${pages}`,
+      }),
+      el('div', { class: 'pager__controls' }, [
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'Previous',
+          disabled: pagination.page <= 1,
+          onClick: () => onPage(pagination.page - 1),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'Next',
+          disabled: pagination.page >= pages,
+          onClick: () => onPage(pagination.page + 1),
+        }),
+      ]),
+    );
+  }
+
+  function showBooking(row) {
+    UI.drawer({
+      title: row.booking_reference,
+      subtitle: `${row.full_name || 'Attendee'} · ${row.status.toLowerCase()}`,
+      render(body) {
+        body.append(
+          el('div', { class: 'u-flex' }, [statusChip(row.status), el('span', { class: 'chip chip--gold', text: 'Admission free' })]),
+
+          el('h3', { text: 'Customer' }),
+          el('dl', { class: 'facts' }, [
+            fact('Name', row.full_name || '—'),
+            fact('Email', row.email || '—'),
+            fact('WhatsApp', row.whatsapp_number || '—'),
+            fact('Verified', row.whatsapp_verified ? 'Yes' : 'Not yet'),
+          ]),
+
+          el('h3', { text: 'Concert' }),
+          el('dl', { class: 'facts' }, [
+            fact('Concert', currentConcertName(row)),
+            fact('Seat', row.seat_number || '—'),
+            fact('Section', row.section_name || '—'),
+          ]),
+
+          el('h3', { text: 'Ticket' }),
+          el('dl', { class: 'facts' }, [
+            fact('Reference', row.booking_reference),
+            fact('Created by', row.source === 'ADMIN' ? 'Staff' : 'The attendee'),
+            fact('Delivery', row.whatsapp_verified ? 'WhatsApp confirmation sent' : 'Awaiting WhatsApp verification'),
+          ]),
+
+          el('h3', { text: 'Timeline' }),
+          bookingTimeline(row),
+        );
+      },
+      actions: [
+        { label: 'Download ticket', onClick: () => downloadTicket(row) },
+        { label: 'Resend confirmation', onClick: () => resendConfirmation(row) },
+        ...(row.status === 'CONFIRMED' || row.status === 'PENDING'
+          ? [
+              {
+                label: 'Cancel booking',
+                variant: 'danger',
+                onClick: ({ close }) => {
+                  close();
+                  cancelBooking(row);
+                },
+              },
+            ]
+          : []),
+      ],
+    });
+  }
+
+  function bookingTimeline(row) {
+    const items = [
+      { label: 'Booking created', at: row.created_at, state: 'done' },
+      row.confirmed_at ? { label: 'Confirmed', at: row.confirmed_at, state: 'done' } : null,
+      row.whatsapp_verified
+        ? { label: 'WhatsApp confirmation sent', at: row.confirmed_at || row.created_at, state: 'done' }
+        : { label: 'Waiting on WhatsApp verification', at: null, state: 'current' },
+      row.cancelled_at
+        ? { label: `Cancelled${row.cancel_reason ? ` — ${row.cancel_reason}` : ''}`, at: row.cancelled_at, state: 'cancelled' }
+        : null,
+    ].filter(Boolean);
+
+    return el(
+      'ul',
+      { class: 'timeline' },
+      items.map((item) =>
+        el('li', { 'data-state': item.state }, [
+          el('strong', { text: item.label }),
+          el('span', { text: item.at ? formatShortDate(item.at) : 'Pending' }),
+        ]),
+      ),
+    );
+  }
+
+  function downloadTicket(row) {
+    // The staff route, not /bookings/mine/confirmation — that one is scoped to
+    // the signed-in attendee and an admin session would not satisfy it.
+    window.open(
+      `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/ticket`,
+      '_blank',
+      'noopener',
+    );
+  }
+
+  async function resendConfirmation(row) {
+    if (!row.whatsapp_verified) {
+      UI.toastError(
+        'No verified WhatsApp number',
+        `${row.full_name || 'This attendee'} has not verified their number, so nothing can be delivered yet.`,
+      );
+      return;
+    }
+    try {
+      const result = await api(`/api/admin/notifications/remind?concert_id=${row.concert_id || state.concertId}`, {
+        method: 'POST',
+        body: {},
+      });
+      UI.toastSuccess('Reminder queued', result.message || 'The confirmation has been re-sent.');
+      invalidate('notifications');
+      refreshUnread();
+    } catch (error) {
+      UI.toastError('Could not resend the confirmation', error.message);
+    }
+  }
+
+  async function cancelBooking(row) {
+    const ok = await UI.confirm({
+      title: `Cancel ${row.booking_reference}?`,
+      message: `Seat ${row.seat_number} is released back to the pool and ${row.full_name || 'the attendee'} is sent a cancellation on WhatsApp.`,
+      confirmLabel: 'Cancel booking',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api(`/api/admin/bookings/${row.id}`, {
+        method: 'DELETE',
+        body: { reason: 'Cancelled by staff' },
+      });
+      UI.toastSuccess('Booking cancelled', row.booking_reference);
+      invalidate('overview', 'concerts', 'reports', 'notifications');
+      await renderBookings();
+      refreshUnread();
+    } catch (error) {
+      UI.toastError('Could not cancel the booking', error.message);
+    }
+  }
+
+  async function manualBooking() {
+    const [{ users }, seatMap] = await Promise.all([
+      api('/api/admin/users?per_page=100'),
+      api(`/api/admin/seats?concert_id=${state.concertId}`),
+    ]);
+
+    const person = el('select', { id: 'mb_user', name: 'user_id', required: true });
+    for (const user of users) {
+      person.append(el('option', { value: user.id, text: `${user.full_name} — ${user.email}` }));
+    }
+
+    const seat = el('select', { id: 'mb_seat', name: 'seat_ids', required: true });
+    for (const section of seatMap.sections) {
+      for (const s of section.seats.filter((x) => x.status === 'AVAILABLE')) {
+        seat.append(el('option', { value: s.id, text: `${s.seat_number} — ${section.name}` }));
       }
     }
-  }
-
-  async function seatAction(seat, action) {
-    if (action === 'release' && seat.booking) {
-      const ok = window.confirm(
-        `Seat ${seat.seat_number} is booked by ${seat.booking.occupant_name}. Releasing it cancels ${seat.booking.reference} and messages them. Continue?`,
-      );
-      if (!ok) return;
-    }
-    try {
-      const result = await api(`/api/admin/seats/${seat.id}/${action}`, { method: 'POST', body: {} });
-      done(result.message);
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  async function setSeatStatus(seat, status) {
-    try {
-      await api(`/api/admin/seats/${seat.id}`, { method: 'PATCH', body: { status } });
-      done(`Seat ${seat.seat_number} is now ${status.toLowerCase()}.`);
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  async function deleteSeat(seat) {
-    if (!window.confirm(`Delete seat ${seat.seat_number}?`)) return;
-    try {
-      const result = await api(`/api/admin/seats/${seat.id}`, { method: 'DELETE' });
-      done(result.message || `Seat ${seat.seat_number} deleted.`);
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  async function deleteSection(section) {
-    if (!window.confirm(`Delete ${section.name} and all of its seats?`)) return;
-    try {
-      await api(`/api/admin/sections/${section.id}`, { method: 'DELETE' });
-      done(`${section.name} deleted.`);
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  $('#section-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
-    busy(submit, true, 'Adding…');
-    try {
-      await api('/api/admin/sections', {
-        method: 'POST',
-        body: { ...formValues(form), concert_id: concertId },
-      });
-      done('Section added.');
-      form.reset();
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
-    }
-  });
-
-  $('#bulk-seat-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
-    busy(submit, true, 'Adding…');
-    try {
-      const result = await api('/api/admin/seats/bulk', {
-        method: 'POST',
-        body: { ...formValues(form), concert_id: concertId },
-      });
-      done(result.message);
-      await loadSeats();
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
-    }
-  });
-
-  // ==========================================================================
-  // Concert
-  // ==========================================================================
-  const toLocalInput = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
-
-  async function loadConcert() {
-    await loadConcertTable();
-    if (!concertId) {
-      notify('[data-notice]', 'Choose a single concert above to edit its settings.', 'warn');
+    if (!seat.options.length) {
+      UI.toastError('No free seats', 'Every seat in this concert is taken, held or blocked.');
       return;
     }
-    const { concert, stats } = await api(`/api/admin/concert${scope()}`);
-    const form = $('#concert-form');
 
-    form.elements.name.value = concert.name ?? '';
-    form.elements.description.value = concert.description ?? '';
-    form.elements.event_date.value = String(concert.event_date ?? '').slice(0, 10);
-    form.elements.start_time.value = String(concert.start_time ?? '').slice(0, 5);
-    form.elements.end_time.value = String(concert.end_time ?? '').slice(0, 5);
-    form.elements.venue.value = concert.venue ?? '';
-    form.elements.address.value = concert.address ?? '';
-    form.elements.max_capacity.value = concert.max_capacity ?? 10;
-    form.elements.booking_ref_prefix.value = concert.booking_ref_prefix ?? 'CHC';
-    form.elements.max_seats_per_booking.value = concert.max_seats_per_booking ?? 0;
-    form.elements.registration_opens_at.value = toLocalInput(concert.registration_opens_at);
-    form.elements.registration_closes_at.value = toLocalInput(concert.registration_closes_at);
-    form.elements.booking_opens_at.value = toLocalInput(concert.booking_opens_at);
-    form.elements.booking_closes_at.value = toLocalInput(concert.booking_closes_at);
+    const form = el('form', {}, [
+      selectField('mb_user', 'Attendee', person, 'user'),
+      selectField('mb_seat', 'Seat', seat, 'seat'),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'mb_note', text: 'Note (optional)' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'note', 'aria-hidden': 'true' }),
+          el('input', { id: 'mb_note', name: 'note', type: 'text', placeholder: 'Booked at the church office' }),
+        ]),
+      ]),
+    ]);
 
-    form.elements.max_capacity.min = String(Math.max(1, stats.booked_seats));
-    $('[data-error-for="max_capacity"]').textContent = '';
-    if (stats.booked_seats > 0) {
-      $('#c_capacity').nextElementSibling.textContent =
-        `The hard limit on confirmed bookings. ${stats.booked_seats} seats are already taken, so it cannot go below that.`;
-    }
+    UI.drawer({
+      title: 'Book a seat for someone',
+      subtitle: 'For people who cannot register themselves. They still need an account.',
+      render: (body) => body.append(form),
+      actions: [
+        { label: 'Cancel', onClick: ({ close }) => close() },
+        {
+          label: 'Create booking',
+          variant: 'primary',
+          onClick: async ({ close }) => {
+            try {
+              const values = formValues(form);
+              const result = await api('/api/admin/bookings', {
+                method: 'POST',
+                body: {
+                  user_id: Number(values.user_id),
+                  seat_ids: [Number(values.seat_ids)],
+                  note: values.note || undefined,
+                  concert_id: state.concertId,
+                },
+              });
+              close();
+              UI.toastSuccess('Booking created', result.message || '');
+              invalidate('overview', 'seats', 'concerts', 'reports', 'notifications');
+              await renderBookings();
+              refreshUnread();
+            } catch (error) {
+              if (error.details) showFieldErrors(form, error.details);
+              UI.toastError('Could not create the booking', error.message);
+            }
+          },
+        },
+      ],
+    });
   }
 
-  $('#concert-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
-    busy(submit, true, 'Saving…');
-    try {
-      const result = await api(`/api/admin/concerts/${concertId}`, {
-        method: 'PATCH',
-        body: formValues(form),
+  const selectField = (id, label, select, icon) =>
+    el('div', { class: 'field' }, [
+      el('label', { for: id, text: label }),
+      el('span', { class: 'field__control field__control--inline' }, [
+        el('span', { class: 'field__icon', 'data-icon': icon, 'aria-hidden': 'true' }),
+        select,
+        el('span', { class: 'field__chevron', 'aria-hidden': 'true' }),
+      ]),
+      el('span', { class: 'field__error', 'data-error-for': select.name }),
+    ]);
+
+  // ==========================================================================
+  // Attendees
+  // ==========================================================================
+
+  async function loadUsers() {
+    await renderUsers();
+    once('users:filters', () => {
+      const rerun = () => {
+        state.users.page = 1;
+        renderUsers().catch((error) => fail(error, 'Could not load attendees'));
+      };
+      $('[data-user-search]').addEventListener('input', debounce(rerun, 300));
+      $('[data-user-status]').addEventListener('change', rerun);
+      $('[data-user-verified]').addEventListener('change', rerun);
+      $('[data-user-booked]').addEventListener('change', rerun);
+      $('[data-action="export-users"]').addEventListener('click', () => {
+        window.open('/api/admin/export/users.csv', '_blank', 'noopener');
       });
-      done(result.message);
-      await loadConcert();
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
-    }
-  });
+    });
+  }
 
-  // --- Concert list ---------------------------------------------------------
-  async function loadConcertTable() {
-    await loadConcertPicker();
-    const body = $('[data-concerts-table]');
-    body.textContent = '';
+  async function renderUsers() {
+    const box = $('[data-users-table]');
+    UI.skeleton(box, { kind: 'row', count: 8 });
 
-    for (const item of concerts) {
-      const availability = item.availability || {};
-      const isCurrent = item.id === concertId;
+    const params = new URLSearchParams({ page: String(state.users.page), per_page: '25' });
+    const search = $('[data-user-search]')?.value.trim();
+    if (search) params.set('search', search);
+    const status = $('[data-user-status]')?.value;
+    if (status) params.set('status', status);
+    const verified = $('[data-user-verified]')?.value;
+    if (verified) params.set('verified', verified);
+    const booked = $('[data-user-booked]')?.value;
+    if (booked) params.set('booked', booked);
 
-      const row = el('tr', { style: isCurrent ? 'background:rgba(242,163,29,0.08)' : null }, [
-        el('td', {}, [
-          el('strong', { text: item.name }),
-          el('div', {
-            class: 'muted',
-            style: 'font-size:0.75rem',
-            text: `${item.venue} · references ${item.booking_ref_prefix}-…`,
-          }),
-        ]),
-        el('td', { class: 'num', text: String(item.event_date).slice(0, 10) }),
-        el('td', { class: 'num', text: String(availability.max_capacity ?? '—') }),
-        el('td', { class: 'num', text: String(availability.booked_seats ?? 0) }),
-        el('td', { class: 'num', text: String(availability.total_seats ?? 0) }),
-        el('td', {}, [
-          !item.is_active
-            ? el('span', { class: 'pill pill--off', text: 'Off' })
-            : availability.fully_booked
-              ? el('span', { class: 'pill pill--wait', text: 'Full' })
-              : el('span', { class: 'pill pill--ok', text: 'Open' }),
-        ]),
-        el('td', {}, [
-          el('div', { class: 'btn-row' }, [
-            el('button', {
-              class: 'btn btn--ghost btn--small',
-              type: 'button',
-              text: isCurrent ? 'Editing' : 'Edit',
-              disabled: isCurrent,
-              onclick: () => {
-                concertId = item.id;
-                $('[data-concert-picker]').value = String(item.id);
-                showTab('concert');
-              },
-            }),
-            el('button', {
-              class: 'btn btn--danger btn--small',
-              type: 'button',
-              text: 'Delete',
-              onclick: () => deleteConcert(item),
-            }),
+    const { users, pagination } = await api(`/api/admin/users?${params}`);
+
+    box.textContent = '';
+    if (!users.length) {
+      UI.empty(box, {
+        title: 'No attendees match',
+        message: 'Try a different search, or clear the filters.',
+        icon: 'users',
+      });
+    } else {
+      const body = el('tbody');
+      for (const user of users) {
+        body.append(
+          el('tr', { 'data-clickable': 'true', onClick: () => showUser(user) }, [
+            el('td', {}, [
+              el('div', { class: 'cell-person' }, [
+                el('span', { class: 'avatar', 'aria-hidden': 'true', text: initials(user.full_name) }),
+                el('div', {}, [
+                  el('span', { class: 'data-table__strong', text: user.full_name }),
+                  el('span', { class: 'data-table__sub', text: user.email }),
+                ]),
+              ]),
+            ]),
+            el('td', { class: 'u-nowrap', text: user.whatsapp_number || '—' }),
+            el('td', {}, [
+              user.whatsapp_verified
+                ? el('span', { class: 'chip chip--ok', text: 'Verified' })
+                : el('span', { class: 'chip chip--wait', text: 'Pending' }),
+            ]),
+            el('td', { class: 'u-tabular', text: String(user.live_seats ?? user.bookings ?? 0) }),
+            el('td', {}, [
+              user.is_active
+                ? el('span', { class: 'chip chip--ok', text: 'Active' })
+                : el('span', { class: 'chip chip--off', text: 'Disabled' }),
+            ]),
+            el('td', { class: 'u-nowrap', text: formatShortDate(user.created_at) }),
           ]),
+        );
+      }
+
+      box.append(
+        el('table', { class: 'data-table' }, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { text: 'Attendee' }),
+              el('th', { text: 'WhatsApp' }),
+              el('th', { text: 'Verification' }),
+              el('th', { text: 'Seats' }),
+              el('th', { text: 'Account' }),
+              el('th', { text: 'Registered' }),
+            ]),
+          ]),
+          body,
         ]),
-      ]);
-      body.append(row);
+      );
     }
 
-    const editing = currentConcert();
-    $('[data-concert-editing]').textContent = editing
-      ? `Edit "${editing.name}"`
-      : 'Choose a concert above to edit it';
+    renderPager($('[data-users-pager]'), pagination, users.length, (page) => {
+      state.users.page = page;
+      renderUsers().catch((error) => fail(error, 'Could not load attendees'));
+    });
   }
 
-  async function deleteConcert(item) {
-    if (
-      !window.confirm(
-        `Delete "${item.name}"? Its sections and seats go with it. Bookings must be cancelled first.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      const result = await api(`/api/admin/concerts/${item.id}`, { method: 'DELETE' });
-      done(result.message);
-      if (concertId === item.id) concertId = null;
-      await loadConcertPicker({ keepSelection: false });
-      await loadConcert();
-    } catch (error) {
-      fail(error);
-    }
-  }
-
-  const newConcertPanel = $('[data-new-concert-form]');
-  $('[data-new-concert]').addEventListener('click', () => {
-    newConcertPanel.hidden = false;
-    newConcertPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
-  $('[data-cancel-new-concert]').addEventListener('click', () => {
-    newConcertPanel.hidden = true;
-  });
-
-  $('#new-concert-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
-    busy(submit, true, 'Creating…');
-    try {
-      const result = await api('/api/admin/concerts', { method: 'POST', body: formValues(form) });
-      done(result.message);
-      form.reset();
-      newConcertPanel.hidden = true;
-      concertId = result.concert.id;
-      await loadConcert();
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
-    }
-  });
-
-  $('[data-duplicate-concert]').addEventListener('click', async () => {
-    const source = currentConcert();
-    if (!source) {
-      notify('[data-notice]', 'Choose a concert to copy first.', 'warn');
-      return;
-    }
-    const date = window.prompt(
-      `Copy the seat layout of "${source.name}" onto a new date.\nSeats come across as free; bookings do not.\n\nDate for the new concert (YYYY-MM-DD):`,
-      String(source.event_date).slice(0, 10),
-    );
-    if (!date) return;
-    const name = window.prompt('Name for the new concert:', `${source.name} (copy)`);
-    if (!name) return;
+  async function showUser(user) {
+    const drawer = UI.drawer({
+      title: user.full_name,
+      subtitle: user.email,
+      render: (body) => UI.skeleton(body, { kind: 'text', count: 6 }),
+    });
 
     try {
-      const result = await api(`/api/admin/concerts/${source.id}/duplicate`, {
-        method: 'POST',
-        body: { name, event_date: date },
-      });
-      done(result.message);
-      concertId = result.concert.id;
-      await loadConcert();
+      const detail = await api(`/api/admin/users/${user.id}`);
+      drawer.body.textContent = '';
+      drawer.body.append(
+        el('div', { class: 'u-flex' }, [
+          detail.user.is_active
+            ? el('span', { class: 'chip chip--ok', text: 'Active' })
+            : el('span', { class: 'chip chip--off', text: 'Disabled' }),
+          detail.user.whatsapp_verified
+            ? el('span', { class: 'chip chip--ok', text: 'WhatsApp verified' })
+            : el('span', { class: 'chip chip--wait', text: 'WhatsApp pending' }),
+        ]),
+        el('h3', { text: 'Contact' }),
+        el('dl', { class: 'facts' }, [
+          fact('Email', detail.user.email),
+          fact('Mobile', detail.user.mobile_number || '—'),
+          fact('WhatsApp', detail.user.whatsapp_number || '—'),
+          fact('Emergency', detail.user.emergency_contact || '—'),
+          fact('Address', detail.user.address || '—'),
+          fact('Age', detail.user.age ? String(detail.user.age) : '—'),
+        ]),
+        el('h3', { text: `Bookings (${detail.bookings.length})` }),
+      );
+
+      if (!detail.bookings.length) {
+        drawer.body.append(el('p', { class: 'muted', text: 'No bookings yet.' }));
+      } else {
+        const list = el('ul', { class: 'timeline' });
+        for (const booking of detail.bookings) {
+          list.append(
+            el('li', { 'data-state': booking.status === 'CANCELLED' ? 'cancelled' : 'done' }, [
+              el('strong', { text: `${booking.booking_reference} · seat ${booking.seat_number}` }),
+              el('span', { text: `${booking.status.toLowerCase()} · ${formatShortDate(booking.created_at)}` }),
+            ]),
+          );
+        }
+        drawer.body.append(list);
+      }
     } catch (error) {
-      fail(error);
+      drawer.body.textContent = '';
+      UI.empty(drawer.body, { title: 'Could not load this attendee', message: error.message, icon: 'alert' });
     }
-  });
-
-  // ==========================================================================
-  // Export
-  // ==========================================================================
-  async function loadExport() {
-    await loadConcertPicker();
-    const concert = currentConcert();
-    const label = concert ? `"${concert.name}"` : 'every concert';
-
-    // Links are plain hrefs so the browser downloads them itself, with the
-    // session cookie attached. Nothing is held in memory.
-    $('[data-export-users]').href = `/api/admin/export/users.csv${scope()}`;
-    $('[data-export-users-note]').textContent = concert
-      ? `Seat columns count only seats held for ${label}.`
-      : 'Seat columns count seats held across all concerts.';
-
-    updateBookingExportLink();
-    $('[data-export-bookings-note]').textContent = `Covers ${label}.`;
   }
-
-  function updateBookingExportLink() {
-    const status = $('[data-export-status]').value;
-    const params = new URLSearchParams({ status });
-    if (concertId) params.set('concert_id', String(concertId));
-    $('[data-export-bookings]').href = `/api/admin/export/bookings.csv?${params}`;
-  }
-
-  $('[data-export-status]').addEventListener('change', updateBookingExportLink);
 
   // ==========================================================================
   // Notifications
   // ==========================================================================
-  async function loadNotifications(page = 1) {
-    const params = new URLSearchParams({ page: String(page) });
-    const search = $('[data-notif-search]').value.trim();
-    if (search) params.set('search', search);
-    for (const [key, selector] of [
-      ['status', '[data-notif-status]'],
-      ['type', '[data-notif-type]'],
-    ]) {
-      const value = $(selector).value;
-      if (value) params.set(key, value);
-    }
 
-    const data = await api(`/api/admin/notifications?${params}`);
-    const body = $('[data-notifications]');
-    body.textContent = '';
+  const NOTIF_TABS = [
+    ['ALL', 'All'],
+    ['BOOKING', 'Bookings'],
+    ['TICKET', 'Tickets'],
+    ['CONCERT', 'Concerts'],
+    ['SYSTEM', 'System'],
+  ];
 
-    if (!data.notifications.length) body.append(emptyRow(5, 'Nothing has been sent yet.'));
-
-    for (const message of data.notifications) {
-      body.append(
-        el('tr', {}, [
-          el('td', { text: message.type.replace(/_/g, ' ').toLowerCase() }),
-          el('td', {}, [
-            el('div', { class: 'mono', style: 'font-size:0.75rem', text: message.recipient }),
-            message.full_name
-              ? el('div', { class: 'muted', style: 'font-size:0.75rem', text: message.full_name })
-              : null,
-          ]),
-          el('td', {}, pillFor(message.status)),
-          el('td', { text: message.sent_at ? formatShortDate(message.sent_at) : '—' }),
-          el('td', {
-            class: 'muted',
-            style: 'font-size:0.75rem;max-width:22rem',
-            text: message.failure_reason || '—',
-          }),
-        ]),
-      );
-    }
-
-    paginate($('[data-notifications-pagination]'), data.pagination, (p) =>
-      loadNotifications(p).catch(fail),
+  async function loadNotifications() {
+    await renderNotifications();
+    once('notifications:readall', () =>
+      $('[data-action="read-all"]').addEventListener('click', async () => {
+      try {
+        await api('/api/admin/console-notifications/read-all', { method: 'PATCH', body: {} });
+        UI.toastSuccess('All caught up');
+        await renderNotifications();
+        refreshUnread();
+      } catch (error) {
+        UI.toastError('Could not mark them read', error.message);
+        }
+      }),
     );
   }
 
-  $('[data-notif-search-go]').addEventListener('click', () => loadNotifications(1).catch(fail));
-  $('[data-send-reminders]').addEventListener('click', async (event) => {
-    if (!window.confirm('Send the event reminder to everyone holding a seat?')) return;
-    busy(event.currentTarget, true, 'Sending…');
-    try {
-      const result = await api('/api/admin/notifications/remind', {
-        method: 'POST',
-        body: { concert_id: concertId },
+  async function renderNotifications() {
+    const list = $('[data-notif-list]');
+    UI.skeleton(list, { kind: 'row', count: 6 });
+
+    const params = new URLSearchParams({ page: String(state.notif.page), per_page: '20' });
+    if (state.notif.category !== 'ALL') params.set('category', state.notif.category);
+    const data = await api(`/api/admin/console-notifications?${params}`);
+
+    const tabs = $('[data-notif-tabs]');
+    tabs.textContent = '';
+    for (const [key, label] of NOTIF_TABS) {
+      const count =
+        key === 'ALL' ? data.counts.unread : data.counts.by_category[key]?.unread || 0;
+      const tab = el('button', {
+        class: 'notif-tab',
+        type: 'button',
+        role: 'tab',
+        'aria-selected': String(state.notif.category === key),
+        onClick: () => {
+          state.notif.category = key;
+          state.notif.page = 1;
+          renderNotifications().catch((error) => fail(error, 'Could not load notifications'));
+        },
       });
-      done(result.message);
-      await loadNotifications(1);
-    } catch (error) {
-      fail(error);
-    } finally {
-      busy(event.currentTarget, false);
+      tab.append(label);
+      if (count) tab.append(el('span', { class: 'notif-tab__count', text: String(count) }));
+      tabs.append(tab);
     }
-  });
+
+    list.textContent = '';
+    if (!data.notifications.length) {
+      UI.empty(list, {
+        title: 'Nothing here',
+        message:
+          state.notif.category === 'ALL'
+            ? 'Notifications appear as bookings come in and concerts fill up.'
+            : 'No notifications in this category.',
+        icon: 'bell',
+      });
+    } else {
+      for (const item of data.notifications) list.append(notifRow(item));
+    }
+
+    renderPager($('[data-notif-pager]'), data.pagination, data.notifications.length, (page) => {
+      state.notif.page = page;
+      renderNotifications().catch((error) => fail(error, 'Could not load notifications'));
+    });
+  }
+
+  const NOTIF_ICON = {
+    BOOKING: 'ticket',
+    TICKET: 'download',
+    CONCERT: 'music',
+    SYSTEM: 'alert',
+  };
+
+  function notifRow(item) {
+    const unread = !item.read_at;
+    const icon = el('span', {
+      class: `notif__icon${item.severity === 'SUCCESS' ? ' notif__icon--success' : item.severity === 'WARNING' ? ' notif__icon--warning' : ''}`,
+      'data-notif-icon': NOTIF_ICON[item.category] || 'info',
+      'aria-hidden': 'true',
+    });
+    paintIcon(icon, NOTIF_ICON[item.category] || 'info', '--notif-icon');
+
+    const row = el('article', { class: 'notif', 'data-unread': String(unread) }, [
+      icon,
+      el('div', { class: 'notif__text' }, [
+        el('h3', { class: 'notif__title', text: item.title }),
+        item.body ? el('p', { class: 'notif__body', text: item.body }) : null,
+        el('time', { class: 'notif__time', datetime: item.created_at, text: relativeTime(item.created_at) }),
+      ]),
+      el('div', { class: 'notif__actions' }, [
+        iconButton(unread ? 'check' : 'eye-view', unread ? 'Mark as read' : 'Mark as unread', async () => {
+          try {
+            await api(`/api/admin/console-notifications/${item.id}`, {
+              method: 'PATCH',
+              body: { read: unread },
+            });
+            await renderNotifications();
+            refreshUnread();
+          } catch (error) {
+            UI.toastError('Could not update it', error.message);
+          }
+        }),
+        iconButton('trash', 'Delete notification', async () => {
+          const ok = await UI.confirm({
+            title: 'Delete this notification?',
+            message: item.title,
+            confirmLabel: 'Delete',
+            danger: true,
+          });
+          if (!ok) return;
+          try {
+            await api(`/api/admin/console-notifications/${item.id}`, { method: 'DELETE' });
+            await renderNotifications();
+            refreshUnread();
+          } catch (error) {
+            UI.toastError('Could not delete it', error.message);
+          }
+        }),
+      ]),
+    ]);
+    return row;
+  }
+
+  // ==========================================================================
+  // Reports & export
+  // ==========================================================================
+
+  const REPORTS = [
+    {
+      key: 'bookings',
+      title: 'Booking report',
+      body: 'Every booking with its reference, attendee, seat and status.',
+      icon: 'ticket',
+      csv: '/api/admin/export/bookings.csv',
+    },
+    {
+      key: 'customers',
+      title: 'Customer report',
+      body: 'Registered attendees, contact details and WhatsApp verification.',
+      icon: 'users',
+      csv: '/api/admin/export/users.csv',
+    },
+    {
+      key: 'concerts',
+      title: 'Concert report',
+      body: 'Each concert with its capacity, seats laid out and occupancy.',
+      icon: 'music',
+      build: () => state.concerts,
+    },
+    {
+      key: 'occupancy',
+      title: 'Seat occupancy report',
+      body: 'Seat counts by status, per concert, for the current window.',
+      icon: 'seat',
+      build: () => state.concerts,
+    },
+  ];
+
+  async function loadReports() {
+    await renderReports();
+    once('reports:filters', () => {
+    $('[data-report-range]').addEventListener('change', (event) => {
+      state.reports.days = Number(event.target.value);
+      renderReports().catch((error) => fail(error, 'Could not load reports'));
+    });
+    $('[data-report-concert]').addEventListener('change', (event) => {
+      state.reports.concertId = event.target.value;
+      renderReports().catch((error) => fail(error, 'Could not load reports'));
+    });
+    $('[data-action="refresh-reports"]').addEventListener('click', () => {
+      renderReports()
+        .then(() => UI.toast('Reports refreshed'))
+        .catch((error) => fail(error, 'Could not refresh'));
+    });
+    });
+  }
+
+  async function renderReports() {
+    const kpis = $('[data-report-kpis]');
+    UI.skeleton(kpis, { kind: 'kpi', count: 5 });
+
+    const query = new URLSearchParams({ days: String(state.reports.days) });
+    if (state.reports.concertId) query.set('concert_id', state.reports.concertId);
+
+    const [summary, trend, concerts] = await Promise.all([
+      api(`/api/admin/analytics/summary?${query}`),
+      api(`/api/admin/analytics/bookings?${query}`),
+      api('/api/admin/analytics/concerts'),
+    ]);
+    state.concerts = concerts.concerts;
+
+    kpis.textContent = '';
+    kpis.append(
+      kpiCard({ label: 'Total bookings', value: summary.bookings.parties, icon: 'ticket', meta: 'parties' }),
+      kpiCard({ label: 'Seats reserved', value: summary.bookings.live_seats, icon: 'seat', meta: 'currently held' }),
+      kpiCard({
+        label: 'Occupancy',
+        value: `${summary.capacity.occupancy}%`,
+        icon: 'gauge',
+        feature: true,
+        rail: summary.capacity.occupancy,
+        meta: `${summary.capacity.remaining} seats free`,
+      }),
+      kpiCard({
+        label: 'Cancellations',
+        value: summary.bookings.cancelled_seats,
+        icon: 'alert',
+        meta: `${summary.bookings.cancellation_rate}% of all seat rows`,
+        delta: {
+          direction: summary.bookings.cancellation_rate > 15 ? 'down' : 'flat',
+          label: summary.bookings.cancellation_rate > 15 ? 'High' : 'Normal',
+        },
+      }),
+      kpiCard({
+        label: 'Registered attendees',
+        value: summary.people.registered,
+        icon: 'users',
+        meta: `${summary.people.whatsapp_verified} WhatsApp verified`,
+      }),
+    );
+
+    UI.lineChart($('[data-report-trend]'), trend.series, [
+      { key: 'seats', label: 'Seats' },
+      { key: 'cancellations', label: 'Cancelled', accent: true },
+    ]);
+
+    UI.stackChart($('[data-report-occupancy]'), [
+      { label: 'Booked', value: summary.seats.booked, tone: 'booked' },
+      { label: 'Available', value: summary.seats.available, tone: 'available' },
+      { label: 'Held', value: summary.seats.reserved, tone: 'reserved' },
+      { label: 'Blocked', value: summary.seats.blocked, tone: 'blocked' },
+    ]);
+
+    UI.rankChart(
+      $('[data-report-performance]'),
+      state.concerts.map((c) => ({ label: c.name, value: c.occupancy, accent: c.occupancy >= 80 })),
+      { suffix: '%' },
+    );
+
+    renderExports();
+  }
+
+  function renderExports() {
+    const box = $('[data-exports]');
+    box.textContent = '';
+    for (const report of REPORTS) {
+      const icon = el('span', { class: 'export-card__icon', 'aria-hidden': 'true' });
+      paintIcon(icon, report.icon, '--export-icon');
+
+      const formats = el('div', { class: 'export-card__formats' });
+      formats.append(
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'CSV',
+          onClick: () => exportReport(report, 'csv'),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'Excel',
+          onClick: () => exportReport(report, 'excel'),
+        }),
+        el('button', {
+          class: 'btn btn--ghost btn--small',
+          type: 'button',
+          text: 'PDF',
+          onClick: () => exportReport(report, 'pdf'),
+        }),
+      );
+
+      box.append(
+        el('article', { class: 'export-card' }, [
+          icon,
+          el('h3', { text: report.title }),
+          el('p', { text: report.body }),
+          formats,
+        ]),
+      );
+    }
+  }
+
+  /**
+   * CSV comes from the server where an endpoint exists, and is built here from
+   * data already on screen where one does not. "Excel" is the same CSV with a
+   * BOM so Excel opens it as UTF-8 rather than mangling names; PDF hands the
+   * table to the browser's own print-to-PDF, which is honest about what it is
+   * rather than shipping a PDF writer for four tables.
+   */
+  function exportReport(report, format) {
+    if (report.csv && format === 'csv') {
+      window.open(report.csv, '_blank', 'noopener');
+      return;
+    }
+
+    const rows = report.build ? report.build() : [];
+    if (!rows.length) {
+      UI.toastError('Nothing to export', 'There is no data in the current window.');
+      return;
+    }
+
+    const columns = [
+      ['name', 'Concert'],
+      ['event_date', 'Date'],
+      ['venue', 'Venue'],
+      ['max_capacity', 'Capacity'],
+      ['total_seats', 'Seats laid out'],
+      ['booked_seats', 'Booked'],
+      ['available_seats', 'Available'],
+      ['reserved_seats', 'Held'],
+      ['blocked_seats', 'Blocked'],
+      ['parties', 'Parties'],
+      ['cancellations', 'Cancellations'],
+      ['occupancy', 'Occupancy %'],
+    ];
+
+    if (format === 'pdf') {
+      printReport(report, rows, columns);
+      return;
+    }
+
+    const csv = [
+      columns.map(([, label]) => label).join(','),
+      ...rows.map((row) =>
+        columns
+          .map(([key]) => {
+            const value = key === 'event_date' ? String(row[key]).slice(0, 10) : row[key];
+            const text = String(value ?? '');
+            return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+          })
+          .join(','),
+      ),
+    ].join('\r\n');
+
+    // The BOM is what makes Excel read this as UTF-8.
+    const blob = new Blob([format === 'excel' ? '﻿' : '', csv], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = el('a', { href: url, download: `${report.key}-report.csv` });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    UI.toastSuccess('Export ready', `${report.title} downloaded.`);
+  }
+
+  function printReport(report, rows, columns) {
+    const win = window.open('', '_blank', 'noopener,width=1024,height=768');
+    if (!win) {
+      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to print a report.');
+      return;
+    }
+    const doc = win.document;
+    doc.title = report.title;
+
+    const style = doc.createElement('style');
+    style.textContent =
+      'body{font:13px system-ui,sans-serif;color:#0f172a;padding:32px}h1{font-size:20px;margin:0 0 4px}p{color:#64748b;margin:0 0 24px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e6eaf0}th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b}';
+    doc.head.append(style);
+
+    const h1 = doc.createElement('h1');
+    h1.textContent = report.title;
+    const sub = doc.createElement('p');
+    sub.textContent = `${report.body} Generated ${new Date().toLocaleString()}.`;
+
+    const table = doc.createElement('table');
+    const thead = doc.createElement('thead');
+    const headRow = doc.createElement('tr');
+    for (const [, label] of columns) {
+      const th = doc.createElement('th');
+      th.textContent = label;
+      headRow.append(th);
+    }
+    thead.append(headRow);
+    const tbody = doc.createElement('tbody');
+    for (const row of rows) {
+      const tr = doc.createElement('tr');
+      for (const [key] of columns) {
+        const td = doc.createElement('td');
+        td.textContent = key === 'event_date' ? String(row[key]).slice(0, 10) : String(row[key] ?? '');
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    table.append(thead, tbody);
+    doc.body.append(h1, sub, table);
+    win.focus();
+    win.print();
+  }
 
   // ==========================================================================
   // Settings
   // ==========================================================================
+
+  const SETTINGS_SECTIONS = {
+    branding: renderBranding,
+    concert: renderConcertSettings,
+    email: renderEmailSettings,
+    whatsapp: renderWhatsappSettings,
+    security: renderSecuritySettings,
+  };
+
   async function loadSettings() {
     const { settings } = await api('/api/admin/settings');
-    $('#s_min_age').value = settings.minimum_age;
-    $('#s_require_wa').checked = Boolean(settings.require_whatsapp_verification);
-    $('#s_self_cancel').checked = Boolean(settings.allow_user_self_cancel);
-    for (const box of $$('[data-dup]')) {
-      box.checked = (settings.duplicate_check_fields || []).includes(box.dataset.dup);
-    }
-    await loadAudit();
+    state.settings = settings;
+
+    once('settings:nav', () => {
+      $$('[data-settings-nav] button').forEach((button) => {
+        button.addEventListener('click', () => {
+          $$('[data-settings-nav] button').forEach((b) =>
+            b.setAttribute('aria-selected', String(b === button)),
+          );
+          SETTINGS_SECTIONS[button.dataset.section]();
+        });
+      });
+    });
+    renderBranding();
   }
 
-  async function loadAudit() {
-    const data = await api('/api/admin/audit-logs?per_page=20');
-    const body = $('[data-audit]');
-    body.textContent = '';
-    if (!data.logs.length) {
-      body.append(emptyRow(4, 'No activity recorded yet.'));
-      return;
-    }
-    for (const log of data.logs) {
-      body.append(
-        el('tr', {}, [
-          el('td', { style: 'white-space:nowrap', text: formatShortDate(log.created_at) }),
-          el('td', { text: log.actor_label || log.actor_type.toLowerCase() }),
-          el('td', { class: 'mono', style: 'font-size:0.6875rem', text: log.action }),
-          el('td', {
-            text: log.entity_type ? `${log.entity_type.toLowerCase()} ${log.entity_id ?? ''}`.trim() : '—',
+  const settingsCard = (title, lede, ...children) =>
+    el('div', { class: 'surface' }, [
+      el('div', { class: 'surface__head' }, [
+        el('div', {}, [el('h2', { text: title }), lede ? el('p', { class: 'surface__head-sub', text: lede }) : null]),
+      ]),
+      el('div', { class: 'surface__body stack' }, children),
+    ]);
+
+  function renderBranding() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
+    box.append(
+      settingsCard(
+        'Branding',
+        'The name and mark used across the site, tickets and messages.',
+        el('div', { class: 'logo-drop' }, [
+          el('div', { class: 'logo-drop__preview' }, [
+            el('img', { src: '/assets/logo.svg', alt: 'Current logo', width: 48, height: 48 }),
+          ]),
+          el('div', {}, [
+            el('p', { class: 'data-table__strong', text: 'Church Concert mark' }),
+            el('p', {
+              class: 'field__hint',
+              text: 'Replace public/assets/logo.svg and favicon.svg to change it everywhere. They are bundled files rather than an upload, because the CSP serves images from this origin only.',
+            }),
+          ]),
+        ]),
+        el('dl', { class: 'facts' }, [
+          fact('Organisation', 'Grace Community Church'),
+          fact('Product name', 'Night of Worship'),
+          fact('Admission', 'Free — no payment is ever collected'),
+        ]),
+      ),
+    );
+  }
+
+  function renderConcertSettings() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
+
+    const form = el('form', { class: 'form-narrow' }, [
+      el('div', { class: 'field' }, [
+        el('label', { for: 's_min_age', text: 'Minimum age' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'identity', 'aria-hidden': 'true' }),
+          el('input', {
+            id: 's_min_age',
+            name: 'minimum_age',
+            type: 'number',
+            min: '18',
+            max: '99',
+            value: state.settings.minimum_age ?? 18,
           }),
         ]),
-      );
-    }
+        el('p', { class: 'field__hint', text: 'Checked on the server when someone registers.' }),
+      ]),
+      checkbox('s_require_wa', 'require_whatsapp_verification', 'Require WhatsApp verification before booking', state.settings.require_whatsapp_verification),
+      checkbox('s_self_cancel', 'allow_user_self_cancel', 'Let attendees cancel their own booking', state.settings.allow_user_self_cancel),
+    ]);
+
+    const save = el('button', { class: 'btn btn--primary btn--small', type: 'submit', text: 'Save settings' });
+    form.append(save);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      busy(save, true, 'Saving…');
+      try {
+        await api('/api/admin/settings', { method: 'PATCH', body: formValues(form) });
+        UI.toastSuccess('Settings saved');
+        invalidate('settings');
+      } catch (error) {
+        UI.toastError('Could not save settings', error.message);
+      } finally {
+        busy(save, false);
+      }
+    });
+
+    box.append(settingsCard('Concert settings', 'Rules applied to every concert unless a concert overrides them.', form));
   }
 
-  $('[data-refresh-audit]').addEventListener('click', () => loadAudit().catch(fail));
+  const checkbox = (id, name, label, checked) =>
+    el('div', { class: 'check' }, [
+      el('input', { id, name, type: 'checkbox', checked: checked ? true : null }),
+      el('label', { for: id, text: label }),
+    ]);
 
-  $('#settings-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    showFieldErrors(form, {});
-    const submit = form.querySelector('button[type="submit"]');
+  function renderEmailSettings() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
+    box.append(
+      settingsCard(
+        'Email',
+        'Which messages go out by email, and where password recovery points.',
+        el('dl', { class: 'facts' }, [
+          fact('Password reset', 'Email — staff and attendees both recover by email link'),
+          fact('Booking confirmation', 'WhatsApp is primary; email is the fallback when no number is verified'),
+          fact('Ticket delivery', 'Attached to the confirmation, and downloadable from the attendee portal'),
+        ]),
+        el('p', {
+          class: 'field__hint',
+          text: 'Sender address and transport are configured in the environment (see .env.example), not here, so a deployment cannot be reconfigured from a browser session.',
+        }),
+      ),
+    );
+  }
 
-    const duplicateFields = $$('[data-dup]')
-      .filter((box) => box.checked)
-      .map((box) => box.dataset.dup);
+  function renderWhatsappSettings() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
 
-    if (!duplicateFields.length) {
-      notify('[data-notice]', 'Keep at least one field unique per account.', 'error');
+    const remind = el('button', { class: 'btn btn--primary btn--small', type: 'button', text: 'Send event reminder to everyone' });
+    remind.addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: 'Send the reminder now?',
+        message: 'Everyone holding a live booking with a verified WhatsApp number gets a message with their seat and reference.',
+        confirmLabel: 'Send reminder',
+      });
+      if (!ok) return;
+      busy(remind, true, 'Sending…');
+      try {
+        const result = await api(`/api/admin/notifications/remind?concert_id=${state.concertId}`, {
+          method: 'POST',
+          body: {},
+        });
+        UI.toastSuccess('Reminders sent', result.message || '');
+      } catch (error) {
+        UI.toastError('Could not send reminders', error.message);
+      } finally {
+        busy(remind, false);
+      }
+    });
+
+    box.append(
+      settingsCard(
+        'WhatsApp',
+        'Used for ticket confirmation and reminders — never for signing in.',
+        el('dl', { class: 'facts' }, [
+          fact('Ticket confirmation', 'Sent on WhatsApp the moment a booking is confirmed'),
+          fact('Event reminder', 'Sent manually, from here'),
+          fact('Registration', 'Email and password — WhatsApp only verifies the number'),
+          fact('Password recovery', 'Email link, not WhatsApp'),
+        ]),
+        remind,
+      ),
+    );
+  }
+
+  function renderSecuritySettings() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
+
+    const form = el('form', { class: 'form-narrow' }, [
+      passwordField('sec_current', 'current_password', 'Current password', 'lock'),
+      passwordField('sec_new', 'new_password', 'New password', 'key'),
+    ]);
+    const save = el('button', { class: 'btn btn--primary btn--small', type: 'submit', text: 'Change password' });
+    form.append(save);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      busy(save, true, 'Saving…');
+      try {
+        await api('/api/auth/admin/password', { method: 'POST', body: formValues(form) });
+        UI.toastSuccess('Password changed', 'Use the new password next time you sign in.');
+        form.reset();
+      } catch (error) {
+        if (error.details) showFieldErrors(form, error.details);
+        UI.toastError('Could not change the password', error.message);
+      } finally {
+        busy(save, false);
+      }
+    });
+
+    box.append(
+      settingsCard(
+        'Security',
+        'Your own account. Attendee accounts are managed from Attendees.',
+        el('dl', { class: 'facts' }, [
+          fact('Signed in as', state.admin?.email || '—'),
+          fact('Role', state.admin?.role || '—'),
+          fact('Session', 'Twelve hours, or fourteen days with “keep me signed in”'),
+        ]),
+        form,
+      ),
+    );
+    enhanceFields(box);
+  }
+
+  const passwordField = (id, name, label, icon) =>
+    el('div', { class: 'field' }, [
+      el('label', { for: id, text: label }),
+      el('span', { class: 'field__control field__control--inline' }, [
+        el('span', { class: 'field__icon', 'data-icon': icon, 'aria-hidden': 'true' }),
+        el('input', { id, name, type: 'password', autocomplete: name.includes('new') ? 'new-password' : 'current-password', required: true }),
+      ]),
+      el('span', { class: 'field__error', 'data-error-for': name }),
+    ]);
+
+  // ==========================================================================
+  // Utilities
+  // ==========================================================================
+
+  function debounce(fn, wait) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  // ==========================================================================
+  // Boot
+  // ==========================================================================
+
+  (async function boot() {
+    try {
+      const { admin } = await api('/api/admin/me');
+      state.admin = admin;
+    } catch {
+      window.location.href = '/admin/login.html';
       return;
     }
 
-    busy(submit, true, 'Saving…');
-    try {
-      const result = await api('/api/admin/settings', {
-        method: 'PATCH',
-        body: {
-          minimum_age: Number($('#s_min_age').value),
-          require_whatsapp_verification: $('#s_require_wa').checked,
-          allow_user_self_cancel: $('#s_self_cancel').checked,
-          duplicate_check_fields: duplicateFields,
-        },
-      });
-      done(result.message);
-    } catch (error) {
-      fail(error);
-      if (error.details) showFieldErrors(form, error.details);
-    } finally {
-      busy(submit, false);
+    $('[data-admin-name]').textContent = state.admin.full_name;
+    $('[data-admin-role]').textContent = state.admin.email;
+    for (const node of [$('[data-admin-initials]'), $('[data-topbar-initials]')]) {
+      node.textContent = initials(state.admin.full_name);
     }
-  });
 
-  // --- Start ----------------------------------------------------------------
-  try {
-    await loadConcertPicker({ keepSelection: false });
-  } catch (error) {
-    fail(error);
-  }
+    mountShell();
+    clearNotice('[data-notice]');
 
-  const initial = window.location.hash.replace('#', '');
-  showTab(loaders[initial] ? initial : 'overview');
+    // Quick actions live on more than one panel, so they are bound once here.
+    $$('[data-action="create-concert"]').forEach((b) => b.addEventListener('click', createConcert));
+    $$('[data-action="export-report"]').forEach((b) =>
+      b.addEventListener('click', () => setTab('reports')),
+    );
+
+    try {
+      const { concerts } = await api('/api/admin/analytics/concerts');
+      state.concerts = concerts;
+      fillConcertPickers(concerts);
+    } catch (error) {
+      fail(error, 'Could not load concerts');
+    }
+
+    refreshUnread();
+    setInterval(refreshUnread, 60_000);
+
+    const initial = window.location.hash.replace('#', '') || 'overview';
+    setTab(initial, { push: false });
+  })();
 })();

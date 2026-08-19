@@ -4,7 +4,9 @@ const express = require('express');
 const db = require('../db');
 const env = require('../env');
 const bookingService = require('../services/booking');
+const { renderTicket } = require('../lib/ticket');
 const notifications = require('../services/notifications');
+const feed = require('../services/console-feed');
 const whatsapp = require('../services/whatsapp');
 const { audit, getSettings } = require('../lib/audit');
 const {
@@ -28,6 +30,7 @@ const publicConcert = (concert) => ({
   id: concert.id,
   name: concert.name,
   description: concert.description,
+  poster_path: concert.poster_path,
   event_date: concert.event_date,
   start_time: concert.start_time,
   end_time: concert.end_time,
@@ -294,6 +297,30 @@ router.post(
       .sendBookingConfirmation(req.user, result.concert, seatNumbers, result.reference)
       .catch((err) => console.error('[bookings] confirmation failed:', err.message));
 
+    // Tell the console, and warn staff if this booking took the concert near
+    // capacity. Both are after the commit and neither is awaited: the seats are
+    // already the attendee's whatever happens here.
+    feed.bookingCreated({
+      reference: result.reference,
+      userName: req.user.full_name,
+      seatNumbers,
+      concertId: result.concert.id,
+      bookingId: result.bookings[0].id,
+    });
+    bookingService
+      .getAvailability(result.concert)
+      .then((availability) =>
+        feed.capacityWarning({
+          concertId: result.concert.id,
+          concertName: result.concert.name,
+          percentFull: availability.max_capacity
+            ? Math.round((availability.booked_seats / availability.max_capacity) * 100)
+            : 0,
+          remaining: availability.remaining_capacity,
+        }),
+      )
+      .catch(() => {});
+
     res.status(201).json({
       booking: {
         booking_reference: result.reference,
@@ -379,6 +406,15 @@ router.delete(
       .sendBookingCancellation(req.user, party.concert, released, reference)
       .catch(() => {});
 
+    feed.bookingCancelled({
+      reference,
+      userName: req.user.full_name,
+      seatNumbers: released,
+      concertId: party.concert.id,
+      bookingId: party.seats[0].booking_id,
+      reason: 'Cancelled by the attendee',
+    });
+
     const remaining = await bookingService.getBookingByReference(reference);
 
     res.json({
@@ -410,58 +446,7 @@ router.get(
       : parties[0];
     if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
 
-    const esc = (value) =>
-      String(value ?? '').replace(
-        /[&<>"']/g,
-        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-      );
-
-    const seatList = party.seats
-      .map((seat) => `${esc(seat.seat_number)} <span class="sec">${esc(seat.section_name)}</span>`)
-      .join('<br>');
-
-    res.type('html').send(`<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Booking ${esc(party.booking_reference)}</title>
-<style>
-  @page { margin: 18mm; }
-  body { font-family: ui-sans-serif, system-ui, sans-serif; color: #17130c; margin: 0; padding: 32px; background: #fff; }
-  .card { max-width: 560px; margin: 0 auto; border: 2px solid #17130c; padding: 28px 32px; }
-  .eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #7a6a4f; }
-  h1 { font-size: 26px; margin: 6px 0 2px; }
-  .ref { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: .06em; margin: 18px 0; padding: 12px 0; border-top: 2px solid #f0a01e; border-bottom: 2px solid #f0a01e; }
-  dl { display: grid; grid-template-columns: 120px 1fr; gap: 10px 16px; margin: 18px 0 0; font-size: 14px; }
-  dt { color: #7a6a4f; }
-  dd { margin: 0; font-weight: 600; }
-  .seat { font-family: ui-monospace, monospace; font-size: 20px; line-height: 1.5; }
-  .sec { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 400; color: #7a6a4f; }
-  .count { display: inline-block; margin-left: 8px; padding: 2px 8px; background: #f0a01e; color: #17130c; font-size: 12px; font-weight: 700; border-radius: 999px; }
-  .free { margin-top: 22px; padding: 10px 14px; background: #fdf3dd; border-left: 4px solid #f0a01e; font-size: 13px; }
-  .print { margin: 24px auto 0; max-width: 560px; }
-  button { font: inherit; padding: 10px 18px; border: 2px solid #17130c; background: #17130c; color: #ffb524; cursor: pointer; font-weight: 700; }
-  @media print { .print { display: none; } body { padding: 0; } }
-</style>
-</head><body>
-<div class="card">
-  <p class="eyebrow">${esc(env.appName)} &mdash; seat confirmation</p>
-  <h1>${esc(party.concert.name)}</h1>
-  <div class="ref">${esc(party.booking_reference)}</div>
-  <dl>
-    <dt>Name</dt><dd>${esc(req.user.full_name)}</dd>
-    <dt>WhatsApp</dt><dd>${esc(req.user.whatsapp_number)}</dd>
-    <dt>${party.seats.length === 1 ? 'Seat' : 'Seats'}</dt>
-    <dd class="seat">${seatList}${party.seats.length > 1 ? `<span class="count">${party.seats.length} seats</span>` : ''}</dd>
-    <dt>Date</dt><dd>${esc(whatsapp.formatDate(party.concert.event_date))}</dd>
-    <dt>Time</dt><dd>${esc(whatsapp.formatTime(party.concert.start_time))}</dd>
-    <dt>Venue</dt><dd>${esc(party.concert.venue)}${party.concert.address ? `, ${esc(party.concert.address)}` : ''}</dd>
-    <dt>Booking Fee</dt><dd>FREE</dd>
-    <dt>Status</dt><dd>${esc(party.status)}</dd>
-  </dl>
-  <p class="free">Admission is free. Show this reference at the door and arrive 20 minutes early.${party.seats.length > 1 ? ' Everyone in your party can arrive together under this one reference.' : ''}</p>
-</div>
-<div class="print"><button onclick="window.print()">Print this page</button></div>
-</body></html>`);
+    res.type('html').send(renderTicket(party, req.user));
   }),
 );
 

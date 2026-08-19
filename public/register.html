@@ -41,13 +41,19 @@
 
               <div class="field">
                 <label for="full_name">Full name</label>
-                <input id="full_name" name="full_name" type="text" autocomplete="name" required />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="user" aria-hidden="true"></span>
+                  <input id="full_name" name="full_name" type="text" autocomplete="name" required />
+                </span>
                 <span class="field__error" data-error-for="full_name"></span>
               </div>
 
               <div class="field">
                 <label for="date_of_birth">Date of birth</label>
-                <input id="date_of_birth" name="date_of_birth" type="date" required />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="calendar" aria-hidden="true"></span>
+                  <input id="date_of_birth" name="date_of_birth" type="date" required />
+                </span>
                 <p class="field__hint">
                   Used to confirm you are 18 or older. We check this on the server.
                 </p>
@@ -56,18 +62,25 @@
 
               <div class="field">
                 <label for="gender">Gender</label>
-                <select id="gender" name="gender" required>
-                  <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="MALE">Male</option>
-                  <option value="OTHER">Other</option>
-                </select>
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="identity" aria-hidden="true"></span>
+                  <select id="gender" name="gender" required>
+                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="MALE">Male</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                  <span class="field__chevron" aria-hidden="true"></span>
+                </span>
                 <span class="field__error" data-error-for="gender"></span>
               </div>
 
               <div class="field">
                 <label for="address">Address</label>
-                <textarea id="address" name="address" autocomplete="street-address" required></textarea>
+                <span class="field__control">
+                  <span class="field__icon" data-icon="home" aria-hidden="true"></span>
+                  <textarea id="address" name="address" autocomplete="street-address" required></textarea>
+                </span>
                 <span class="field__error" data-error-for="address"></span>
               </div>
             </fieldset>
@@ -77,33 +90,42 @@
 
               <div class="field">
                 <label for="email">Email address</label>
-                <input id="email" name="email" type="email" autocomplete="email" required />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="mail" aria-hidden="true"></span>
+                  <input id="email" name="email" type="email" autocomplete="email" required />
+                </span>
                 <span class="field__error" data-error-for="email"></span>
               </div>
 
               <div class="field">
                 <label for="mobile_number">Mobile number</label>
-                <input
-                  id="mobile_number"
-                  name="mobile_number"
-                  type="tel"
-                  autocomplete="tel"
-                  placeholder="+91 98765 43210"
-                  required
-                />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="phone" aria-hidden="true"></span>
+                  <input
+                    id="mobile_number"
+                    name="mobile_number"
+                    type="tel"
+                    autocomplete="tel"
+                    placeholder="+91 98765 43210"
+                    required
+                  />
+                </span>
                 <span class="field__error" data-error-for="mobile_number"></span>
               </div>
 
               <div class="field">
                 <label for="whatsapp_number">WhatsApp number</label>
-                <input
-                  id="whatsapp_number"
-                  name="whatsapp_number"
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  required
-                />
-                <div class="check" style="margin-top: 0.6rem">
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="whatsapp" aria-hidden="true"></span>
+                  <input
+                    id="whatsapp_number"
+                    name="whatsapp_number"
+                    type="tel"
+                    placeholder="+91 98765 43210"
+                    required
+                  />
+                </span>
+                <div class="check mt-sm">
                   <input id="same_as_mobile" type="checkbox" />
                   <label for="same_as_mobile">Same as my mobile number</label>
                 </div>
@@ -112,7 +134,10 @@
 
               <div class="field">
                 <label for="emergency_contact">Emergency contact number</label>
-                <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="lifebuoy" aria-hidden="true"></span>
+                  <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                </span>
                 <p class="field__hint">Someone we can call on the night if you need help.</p>
                 <span class="field__error" data-error-for="emergency_contact"></span>
               </div>
@@ -122,13 +147,16 @@
               <legend>Your password</legend>
               <div class="field">
                 <label for="password">Password</label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autocomplete="new-password"
-                  required
-                />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="lock" aria-hidden="true"></span>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="new-password"
+                    required
+                  />
+                </span>
                 <p class="field__hint">
                   At least 10 characters, with an uppercase letter, a lowercase letter and a number.
                 </p>

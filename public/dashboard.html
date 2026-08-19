@@ -26,8 +26,8 @@
         <div class="card card--tint card--split">
           <div>
             <p class="eyebrow">Your dashboard</p>
-            <h1 data-greeting style="margin-bottom: 0.35rem">Welcome back</h1>
-            <p class="muted" style="margin: 0">
+            <h1 data-greeting class="mb-sm">Welcome back</h1>
+            <p class="muted m-0">
               Your seats, your WhatsApp status and your details, all in one place.
             </p>
           </div>
@@ -45,7 +45,7 @@
             <span data-booking-pill></span>
           </div>
           <div class="card__body" data-booking-body>
-            <div class="skeleton" style="height: 6rem"></div>
+            <div class="skeleton skeleton--block"></div>
           </div>
         </div>
 
@@ -64,26 +64,35 @@
             <div class="card__head"><h2>Profile</h2></div>
             <div class="card__body">
               <dl class="detail" data-profile></dl>
-              <div class="btn-row" style="margin-top: 1.25rem">
+              <div class="btn-row mt-md">
                 <button class="btn btn--ghost btn--small" type="button" data-toggle-profile>
                   Update my details
                 </button>
               </div>
 
-              <form id="profile-form" hidden style="margin-top: 1.5rem">
+              <form id="profile-form" class="mt-lg" hidden>
                 <div class="field">
                   <label for="full_name">Full name</label>
-                  <input id="full_name" name="full_name" type="text" required />
+                  <span class="field__control field__control--inline">
+                    <span class="field__icon" data-icon="user" aria-hidden="true"></span>
+                    <input id="full_name" name="full_name" type="text" required />
+                  </span>
                   <span class="field__error" data-error-for="full_name"></span>
                 </div>
                 <div class="field">
                   <label for="mobile_number">Mobile number</label>
-                  <input id="mobile_number" name="mobile_number" type="tel" required />
+                  <span class="field__control field__control--inline">
+                    <span class="field__icon" data-icon="phone" aria-hidden="true"></span>
+                    <input id="mobile_number" name="mobile_number" type="tel" required />
+                  </span>
                   <span class="field__error" data-error-for="mobile_number"></span>
                 </div>
                 <div class="field">
                   <label for="whatsapp_number">WhatsApp number</label>
-                  <input id="whatsapp_number" name="whatsapp_number" type="tel" required />
+                  <span class="field__control field__control--inline">
+                    <span class="field__icon" data-icon="whatsapp" aria-hidden="true"></span>
+                    <input id="whatsapp_number" name="whatsapp_number" type="tel" required />
+                  </span>
                   <p class="field__hint">
                     Changing this means verifying the new number before you can book.
                   </p>
@@ -91,12 +100,18 @@
                 </div>
                 <div class="field">
                   <label for="address">Address</label>
-                  <textarea id="address" name="address" required></textarea>
+                  <span class="field__control">
+                    <span class="field__icon" data-icon="home" aria-hidden="true"></span>
+                    <textarea id="address" name="address" required></textarea>
+                  </span>
                   <span class="field__error" data-error-for="address"></span>
                 </div>
                 <div class="field">
                   <label for="emergency_contact">Emergency contact number</label>
-                  <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                  <span class="field__control field__control--inline">
+                    <span class="field__icon" data-icon="lifebuoy" aria-hidden="true"></span>
+                    <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                  </span>
                   <span class="field__error" data-error-for="emergency_contact"></span>
                 </div>
                 <button class="btn btn--primary btn--small" type="submit">Save changes</button>
@@ -109,27 +124,33 @@
         <div class="card card--flush">
           <div class="card__head"><h2>Account</h2></div>
           <div class="card__body">
-            <form id="password-form" style="max-width: 420px">
+            <form id="password-form" class="form-narrow">
               <div class="field">
                 <label for="current_password">Current password</label>
-                <input
-                  id="current_password"
-                  name="current_password"
-                  type="password"
-                  autocomplete="current-password"
-                  required
-                />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="lock" aria-hidden="true"></span>
+                  <input
+                    id="current_password"
+                    name="current_password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                  />
+                </span>
                 <span class="field__error" data-error-for="current_password"></span>
               </div>
               <div class="field">
                 <label for="new_password">New password</label>
-                <input
-                  id="new_password"
-                  name="new_password"
-                  type="password"
-                  autocomplete="new-password"
-                  required
-                />
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="key" aria-hidden="true"></span>
+                  <input
+                    id="new_password"
+                    name="new_password"
+                    type="password"
+                    autocomplete="new-password"
+                    required
+                  />
+                </span>
                 <p class="field__hint">
                   At least 10 characters, with an uppercase letter, a lowercase letter and a number.
                 </p>

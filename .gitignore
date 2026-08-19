@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.log
+.DS_Store
+coverage/
+dist/
+# Uploaded concert posters are deployment data, not source.
+public/assets/posters/uploads/

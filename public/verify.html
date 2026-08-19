@@ -38,28 +38,26 @@
           <form id="verify-form" novalidate>
             <div class="field">
               <label for="code">Verification code</label>
-              <input
-                id="code"
-                name="code"
-                type="text"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                maxlength="8"
-                required
-                style="
-                  font-family: var(--mono);
-                  font-size: 1.5rem;
-                  letter-spacing: 0.35em;
-                  text-align: center;
-                "
-              />
+              <span class="field__control field__control--inline">
+                <span class="field__icon" data-icon="key" aria-hidden="true"></span>
+                <input
+                  class="code-input"
+                  id="code"
+                  name="code"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="8"
+                  required
+                />
+              </span>
               <span class="field__error" data-error-for="code"></span>
             </div>
 
             <button class="btn btn--primary btn--block" type="submit">Verify my number</button>
           </form>
 
-          <div class="btn-row" style="margin-top: 1.25rem">
+          <div class="btn-row mt-md">
             <button class="btn btn--ghost btn--small" type="button" data-resend>
               Send a new code
             </button>
@@ -67,7 +65,7 @@
           </div>
         </div>
 
-        <p class="center muted" style="font-size: 0.8125rem">
+        <p class="center muted text-sm">
           Not receiving anything? Check that the number in your profile is the one WhatsApp is
           installed on, then request a new code.
         </p>

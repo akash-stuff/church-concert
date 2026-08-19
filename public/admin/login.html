@@ -4,67 +4,110 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
-    <title>Staff sign-in</title>
+    <title>Sign in — Night of Worship</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/css/app.css" />
   </head>
   <body>
-    <header class="masthead">
-      <div class="masthead__inner">
-        <a class="masthead__mark" href="/">
-          <img class="masthead__logo" src="/assets/logo.svg" alt="" width="34" height="34" />
-          <span class="masthead__text">
-            <span class="masthead__name">Night of Worship</span>
-            <span class="masthead__sub">Administration</span>
+    <main class="auth">
+      <!-- Left half: the picture. Hidden entirely below 62rem rather than
+           shrunk, because a letterboxed sliver of it reads as a mistake. -->
+      <section class="auth__art" aria-hidden="true">
+        <img src="/assets/auth-backdrop.svg" alt="" width="1000" height="1200" />
+
+        <a class="auth__brand" href="/">
+          <img src="/assets/logo.svg" alt="" width="38" height="38" />
+          <span>
+            <span class="auth__brand-name">Night of Worship</span>
+            <span class="auth__brand-sub">Concert management</span>
           </span>
         </a>
-        <nav aria-label="Main"><a href="/">Public site</a></nav>
-      </div>
-    </header>
 
-    <main>
-      <div class="wrap wrap--narrow stack">
-        <div>
-          <p class="eyebrow">Restricted</p>
-          <h1>Staff sign-in</h1>
-          <p class="muted">
-            This area manages seats, bookings and attendee records. Attendees sign in on the
-            <a href="/login.html">main site</a>.
+        <div class="auth__pitch">
+          <h2>Every seat accounted for.</h2>
+          <p>
+            Plan the evening, watch the hall fill, and get everyone through the door with their
+            name on a seat. Admission is free — the only thing being managed here is space.
           </p>
+          <ul class="auth__stats">
+            <li><strong>Free</strong><span>Every seat, always</span></li>
+            <li><strong>WhatsApp</strong><span>Tickets and reminders</span></li>
+            <li><strong>Live</strong><span>Seat map and capacity</span></li>
+          </ul>
         </div>
+      </section>
 
-        <div class="notice" data-notice></div>
+      <!-- Right half: the form. -->
+      <section class="auth__panel">
+        <div class="auth__card">
+          <a class="auth__mobile-brand" href="/">
+            <img src="/assets/logo.svg" alt="" width="34" height="34" />
+            <span class="auth__brand-name">Night of Worship</span>
+          </a>
 
-        <div class="card">
-          <form id="admin-login-form" novalidate>
-            <div class="field">
-              <label for="email">Work email</label>
-              <input id="email" name="email" type="email" autocomplete="username" required />
-              <span class="field__error" data-error-for="email"></span>
-            </div>
-            <div class="field">
-              <label for="password">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autocomplete="current-password"
-                required
-              />
-              <span class="field__error" data-error-for="password"></span>
-            </div>
-            <button class="btn btn--primary btn--block" type="submit">Sign in</button>
-          </form>
+          <p class="eyebrow">Staff access</p>
+          <h1>Sign in to the console</h1>
+          <p>
+            Attendees book on the <a href="/login.html">main site</a>. This area manages concerts,
+            seats and bookings.
+          </p>
+
+          <div class="notice" data-notice role="status" aria-live="polite"></div>
+
+          <div class="surface surface--pad">
+            <form id="admin-login-form" novalidate>
+              <div class="field">
+                <label for="email">Work email</label>
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="mail" aria-hidden="true"></span>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autocomplete="username"
+                    autofocus
+                    required
+                  />
+                </span>
+                <span class="field__error" data-error-for="email"></span>
+              </div>
+
+              <div class="field">
+                <label for="password">Password</label>
+                <span class="field__control field__control--inline">
+                  <span class="field__icon" data-icon="lock" aria-hidden="true"></span>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                  />
+                </span>
+                <span class="field__error" data-error-for="password"></span>
+              </div>
+
+              <div class="auth__row">
+                <div class="check">
+                  <input id="remember" name="remember" type="checkbox" />
+                  <label for="remember">Keep me signed in</label>
+                </div>
+                <a href="/forgot-password.html">Forgot password?</a>
+              </div>
+
+              <button class="btn btn--primary btn--block" type="submit">Sign in</button>
+            </form>
+
+            <p class="auth__foot">
+              Password recovery is by email. A reset link goes to your work address — staff accounts
+              never use WhatsApp for sign-in.
+            </p>
+          </div>
         </div>
-      </div>
+      </section>
     </main>
 
-    <footer class="footer">
-      <div class="wrap">Grace Community Church · Administration</div>
-    </footer>
-
-    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
-    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
+    <div class="toast-stack" data-toasts aria-live="polite" aria-atomic="false"></div>
 
     <script src="/js/core.js"></script>
     <script src="/admin/login.js"></script>

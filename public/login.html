@@ -35,20 +35,26 @@
           <form id="login-form" novalidate>
             <div class="field">
               <label for="identifier">Email or phone number</label>
-              <input id="identifier" name="identifier" type="text" autocomplete="username" required />
+              <span class="field__control field__control--inline">
+                <span class="field__icon" data-icon="identity" aria-hidden="true"></span>
+                <input id="identifier" name="identifier" type="text" autocomplete="username" required />
+              </span>
               <span class="field__error" data-error-for="identifier"></span>
             </div>
 
             <div class="field">
               <label for="password">Password</label>
-              <input id="password" name="password" type="password" autocomplete="current-password" required />
+              <span class="field__control field__control--inline">
+                <span class="field__icon" data-icon="lock" aria-hidden="true"></span>
+                <input id="password" name="password" type="password" autocomplete="current-password" required />
+              </span>
               <span class="field__error" data-error-for="password"></span>
             </div>
 
             <button class="btn btn--primary btn--block" type="submit">Sign in</button>
           </form>
 
-          <p class="center muted" style="margin: 1.25rem 0 0; font-size: 0.8125rem">
+          <p class="center muted mt-md mb-0 text-sm">
             <a href="/forgot-password.html">Forgotten your password?</a>
           </p>
         </div>

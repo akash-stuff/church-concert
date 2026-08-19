@@ -4,6 +4,10 @@ const express = require('express');
 const db = require('../db');
 const bookingService = require('../services/booking');
 const notifications = require('../services/notifications');
+const feed = require('../services/console-feed');
+const { renderTicket } = require('../lib/ticket');
+const fs = require('fs/promises');
+const path = require('path');
 const { audit, getSettings, setSettings } = require('../lib/audit');
 const {
   asyncRoute,
@@ -12,6 +16,7 @@ const {
   conflict,
   ageOn,
   maskPhone,
+  randomToken,
 } = require('../lib/helpers');
 const schemas = require('../lib/schemas');
 const { parse } = schemas;
@@ -296,6 +301,15 @@ router.post(
     notifications
       .sendBookingConfirmation(result.user, result.concert, seatNumbers, result.reference)
       .catch(() => {});
+
+    feed.bookingCreated({
+      reference: result.reference,
+      userName: result.user.full_name,
+      seatNumbers,
+      concertId: result.concert.id,
+      bookingId: result.bookings[0].id,
+      byStaff: true,
+    });
 
     res.status(201).json({
       booking: {
@@ -1225,6 +1239,428 @@ router.post(
       ok: true,
       message: `Sent ${sent} of ${rows.length} reminders. Check the notification log for failures.`,
     });
+  }),
+);
+
+
+// ---------------------------------------------------------------------------
+// Console notification feed
+//
+// Staff-facing, and deliberately not the same thing as /notifications above,
+// which lists outbound WhatsApp and email to attendees. See
+// services/console-feed.js for why the two are separate tables.
+// ---------------------------------------------------------------------------
+
+router.get(
+  '/console-notifications',
+  asyncRoute(async (req, res) => {
+    const { page, size, offset } = pageParams(req, 20);
+    const where = [];
+    const params = [];
+
+    const category = String(req.query.category || '').toUpperCase();
+    if (category && category !== 'ALL') {
+      if (!feed.CATEGORIES.includes(category)) throw badRequest('Unknown category.');
+      where.push('n.category = ?');
+      params.push(category);
+    }
+    if (req.query.unread === 'true') where.push('n.read_at IS NULL');
+
+    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const rows = await db.query(
+      `SELECT n.*, c.name AS concert_name
+         FROM admin_notifications n
+         LEFT JOIN concerts c ON c.id = n.concert_id
+         ${clause}
+        ORDER BY n.id DESC LIMIT ? OFFSET ?`,
+      [...params, size, offset],
+    );
+
+    const total = await db.queryOne(
+      `SELECT COUNT(*) AS count FROM admin_notifications n ${clause}`,
+      params,
+    );
+
+    // Counts for the category chips and the header bell, in one round trip.
+    const counts = await db.query(
+      `SELECT category, COUNT(*) AS total, SUM(read_at IS NULL) AS unread
+         FROM admin_notifications GROUP BY category`,
+    );
+    const byCategory = {};
+    let unreadTotal = 0;
+    let grandTotal = 0;
+    for (const row of counts) {
+      byCategory[row.category] = { total: Number(row.total), unread: Number(row.unread || 0) };
+      unreadTotal += Number(row.unread || 0);
+      grandTotal += Number(row.total);
+    }
+
+    res.json({
+      notifications: rows,
+      counts: { by_category: byCategory, unread: unreadTotal, total: grandTotal },
+      pagination: { page, per_page: size, total: Number(total.count) },
+    });
+  }),
+);
+
+/** Just the badge number, for polling without pulling the whole feed. */
+router.get(
+  '/console-notifications/unread-count',
+  asyncRoute(async (req, res) => {
+    const row = await db.queryOne(
+      `SELECT COUNT(*) AS count FROM admin_notifications WHERE read_at IS NULL`,
+    );
+    res.json({ unread: Number(row.count) });
+  }),
+);
+
+router.patch(
+  '/console-notifications/read-all',
+  asyncRoute(async (req, res) => {
+    await db.query(`UPDATE admin_notifications SET read_at = NOW() WHERE read_at IS NULL`);
+    res.json({ ok: true, unread: 0, message: 'All notifications marked as read.' });
+  }),
+);
+
+router.patch(
+  '/console-notifications/:id',
+  asyncRoute(async (req, res) => {
+    const read = req.body?.read !== false;
+    const result = await db.query(`UPDATE admin_notifications SET read_at = ? WHERE id = ?`, [
+      read ? new Date() : null,
+      req.params.id,
+    ]);
+    if (!result.affectedRows) throw notFound('Notification not found.');
+    res.json({ ok: true });
+  }),
+);
+
+router.delete(
+  '/console-notifications/:id',
+  asyncRoute(async (req, res) => {
+    const result = await db.query(`DELETE FROM admin_notifications WHERE id = ?`, [req.params.id]);
+    if (!result.affectedRows) throw notFound('Notification not found.');
+    res.json({ ok: true });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Concert poster upload
+//
+// Multipart would mean a new dependency, so the browser sends a data URI in
+// JSON instead and this decodes it. The checks below are the whole security
+// story, so they are deliberately strict:
+//
+//   * only raster types are accepted. SVG is refused on purpose — it is a
+//     document that can carry script, and these files are served same-origin
+//     from a page with a CSP that trusts 'self'.
+//   * the extension is derived from the declared type, never from anything
+//     the client sends as a filename, so no path or double-extension games.
+//   * the filename is generated here, so nothing user-supplied reaches the
+//     filesystem at all.
+// ---------------------------------------------------------------------------
+
+const POSTER_TYPES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+const POSTER_MAX_BYTES = 2 * 1024 * 1024;
+const POSTER_DIR = path.join(__dirname, '..', '..', 'public', 'assets', 'posters', 'uploads');
+
+router.post(
+  '/concerts/:id/poster',
+  asyncRoute(async (req, res) => {
+    const concert = await bookingService.getConcert(Number(req.params.id));
+
+    const dataUri = String(req.body?.image || '');
+    const match = /^data:([a-z/+-]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUri);
+    if (!match) throw badRequest('Send the image as a base64 data URI.', 'BAD_IMAGE');
+
+    const extension = POSTER_TYPES[match[1]];
+    if (!extension) {
+      throw badRequest('Posters must be PNG, JPEG or WebP.', 'BAD_IMAGE_TYPE');
+    }
+
+    const bytes = Buffer.from(match[2], 'base64');
+    if (!bytes.length) throw badRequest('That image is empty.', 'BAD_IMAGE');
+    if (bytes.length > POSTER_MAX_BYTES) {
+      throw badRequest('Posters must be 2 MB or smaller.', 'IMAGE_TOO_LARGE');
+    }
+
+    await fs.mkdir(POSTER_DIR, { recursive: true });
+    const filename = `concert-${concert.id}-${randomToken(8)}.${extension}`;
+    await fs.writeFile(path.join(POSTER_DIR, filename), bytes);
+
+    const posterPath = `/assets/posters/uploads/${filename}`;
+    const previous = concert.poster_path;
+    await db.query('UPDATE concerts SET poster_path = ? WHERE id = ?', [posterPath, concert.id]);
+
+    // Best-effort cleanup of the file this one replaces. Only ever inside the
+    // uploads directory, so a hand-set poster_path pointing at bundled artwork
+    // can never be deleted by an upload.
+    if (previous && previous.startsWith('/assets/posters/uploads/')) {
+      fs.unlink(path.join(POSTER_DIR, path.basename(previous))).catch(() => {});
+    }
+
+    await audit(req, {
+      action: 'CONCERT_POSTER_UPDATED',
+      entityType: 'CONCERT',
+      entityId: concert.id,
+      metadata: { poster_path: posterPath, bytes: bytes.length },
+    });
+
+    res.json({ poster_path: posterPath, message: 'Poster updated.' });
+  }),
+);
+
+router.delete(
+  '/concerts/:id/poster',
+  asyncRoute(async (req, res) => {
+    const concert = await bookingService.getConcert(Number(req.params.id));
+    if (concert.poster_path && concert.poster_path.startsWith('/assets/posters/uploads/')) {
+      fs.unlink(path.join(POSTER_DIR, path.basename(concert.poster_path))).catch(() => {});
+    }
+    await db.query('UPDATE concerts SET poster_path = NULL WHERE id = ?', [concert.id]);
+    await audit(req, {
+      action: 'CONCERT_POSTER_CLEARED',
+      entityType: 'CONCERT',
+      entityId: concert.id,
+    });
+    res.json({ poster_path: null, message: 'Poster removed. The bundled artwork is back.' });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Dashboard and report aggregates
+// ---------------------------------------------------------------------------
+
+/** Clamp a ?days= window to something a chart can actually draw. */
+const windowDays = (req, fallback = 30) =>
+  Math.min(365, Math.max(7, Number.parseInt(req.query.days, 10) || fallback));
+
+/**
+ * Day-by-day booking activity for the overview chart.
+ *
+ * The SQL only returns days that had activity, so the gaps are filled in here
+ * — a line chart with missing days draws a misleading slope.
+ */
+router.get(
+  '/analytics/bookings',
+  asyncRoute(async (req, res) => {
+    const days = windowDays(req);
+    const concertId = req.query.concert_id ? Number(req.query.concert_id) : null;
+
+    const where = ['b.created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)'];
+    const params = [days];
+    if (concertId) {
+      where.push('b.concert_id = ?');
+      params.push(concertId);
+    }
+
+    const rows = await db.query(
+      `SELECT DATE(b.created_at) AS day,
+              COUNT(*) AS seats,
+              COUNT(DISTINCT b.booking_reference) AS bookings,
+              SUM(b.status = 'CANCELLED') AS cancellations
+         FROM bookings b
+        WHERE ${where.join(' AND ')}
+        GROUP BY DATE(b.created_at)
+        ORDER BY day ASC`,
+      params,
+    );
+
+    const byDay = new Map(
+      rows.map((row) => [
+        row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10),
+        row,
+      ]),
+    );
+
+    const series = [];
+    const today = new Date();
+    for (let i = days - 1; i >= 0; i -= 1) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const key = date.toISOString().slice(0, 10);
+      const row = byDay.get(key);
+      series.push({
+        date: key,
+        seats: row ? Number(row.seats) : 0,
+        bookings: row ? Number(row.bookings) : 0,
+        cancellations: row ? Number(row.cancellations || 0) : 0,
+      });
+    }
+
+    res.json({ days, series });
+  }),
+);
+
+/**
+ * One row per concert: capacity, what is taken, and how full it is. Drives the
+ * concert-performance chart and the occupancy report.
+ */
+router.get(
+  '/analytics/concerts',
+  asyncRoute(async (req, res) => {
+    const rows = await db.query(
+      `SELECT c.id, c.name, c.event_date, c.start_time, c.venue, c.max_capacity, c.is_active,
+              (SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id) AS total_seats,
+              (SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id AND s.status = 'AVAILABLE') AS available_seats,
+              (SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id AND s.status = 'RESERVED') AS reserved_seats,
+              (SELECT COUNT(*) FROM seats s WHERE s.concert_id = c.id AND s.status = 'DISABLED') AS blocked_seats,
+              (SELECT COUNT(*) FROM bookings b
+                WHERE b.concert_id = c.id AND b.status IN ${bookingService.ACTIVE}) AS booked_seats,
+              (SELECT COUNT(DISTINCT b.booking_reference) FROM bookings b
+                WHERE b.concert_id = c.id AND b.status IN ${bookingService.ACTIVE}) AS parties,
+              (SELECT COUNT(*) FROM bookings b
+                WHERE b.concert_id = c.id AND b.status = 'CANCELLED') AS cancellations
+         FROM concerts c
+        ORDER BY c.event_date DESC`,
+    );
+
+    const concerts = rows.map((row) => {
+      const capacity = Number(row.max_capacity) || 0;
+      const booked = Number(row.booked_seats) || 0;
+      return {
+        ...row,
+        total_seats: Number(row.total_seats),
+        available_seats: Number(row.available_seats),
+        reserved_seats: Number(row.reserved_seats),
+        blocked_seats: Number(row.blocked_seats),
+        booked_seats: booked,
+        parties: Number(row.parties),
+        cancellations: Number(row.cancellations),
+        occupancy: capacity ? Math.round((booked / capacity) * 100) : 0,
+      };
+    });
+
+    res.json({ concerts });
+  }),
+);
+
+/**
+ * The numbers behind Reports & Export, for whatever window and filters the page
+ * is showing. Deliberately returns the same shape whether or not a concert is
+ * named, so the page does not branch on it.
+ */
+router.get(
+  '/analytics/summary',
+  asyncRoute(async (req, res) => {
+    const days = windowDays(req, 90);
+    const concertId = req.query.concert_id ? Number(req.query.concert_id) : null;
+
+    const scope = ['b.created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)'];
+    const params = [days];
+    if (concertId) {
+      scope.push('b.concert_id = ?');
+      params.push(concertId);
+    }
+    const clause = scope.join(' AND ');
+
+    const bookings = await db.queryOne(
+      `SELECT COUNT(DISTINCT b.booking_reference) AS parties,
+              COUNT(*) AS seats,
+              SUM(b.status IN ('PENDING','CONFIRMED')) AS live_seats,
+              SUM(b.status = 'CANCELLED') AS cancelled_seats,
+              SUM(b.source = 'ADMIN') AS staff_created
+         FROM bookings b WHERE ${clause}`,
+      params,
+    );
+
+    const seatScope = concertId ? 'WHERE concert_id = ?' : '';
+    const seatParams = concertId ? [concertId] : [];
+    const seats = await db.queryOne(
+      `SELECT COUNT(*) AS total,
+              SUM(status = 'AVAILABLE') AS available,
+              SUM(status = 'RESERVED') AS reserved,
+              SUM(status = 'BOOKED') AS booked,
+              SUM(status = 'DISABLED') AS blocked
+         FROM seats ${seatScope}`,
+      seatParams,
+    );
+
+    const people = await db.queryOne(
+      `SELECT COUNT(*) AS registered,
+              SUM(whatsapp_verified = 1) AS verified,
+              SUM(is_active = 1) AS active
+         FROM users`,
+    );
+
+    const capacityRow = await db.queryOne(
+      concertId
+        ? 'SELECT SUM(max_capacity) AS capacity FROM concerts WHERE id = ?'
+        : 'SELECT SUM(max_capacity) AS capacity FROM concerts',
+      seatParams,
+    );
+
+    const liveSeats = Number(bookings.live_seats || 0);
+    const capacity = Number(capacityRow.capacity || 0);
+    const cancelledSeats = Number(bookings.cancelled_seats || 0);
+    const totalSeatRows = Number(bookings.seats || 0);
+
+    res.json({
+      window_days: days,
+      concert_id: concertId,
+      bookings: {
+        parties: Number(bookings.parties || 0),
+        seats: totalSeatRows,
+        live_seats: liveSeats,
+        cancelled_seats: cancelledSeats,
+        staff_created: Number(bookings.staff_created || 0),
+        cancellation_rate: totalSeatRows
+          ? Math.round((cancelledSeats / totalSeatRows) * 100)
+          : 0,
+      },
+      seats: {
+        total: Number(seats.total || 0),
+        available: Number(seats.available || 0),
+        reserved: Number(seats.reserved || 0),
+        booked: Number(seats.booked || 0),
+        blocked: Number(seats.blocked || 0),
+      },
+      capacity: {
+        total: capacity,
+        taken: liveSeats,
+        remaining: Math.max(0, capacity - liveSeats),
+        occupancy: capacity ? Math.round((liveSeats / capacity) * 100) : 0,
+      },
+      people: {
+        registered: Number(people.registered || 0),
+        whatsapp_verified: Number(people.verified || 0),
+        active: Number(people.active || 0),
+      },
+    });
+  }),
+);
+
+
+/**
+ * The same printable confirmation an attendee gets, fetched by reference.
+ *
+ * Staff reach this for anybody, which is the whole difference from
+ * /api/bookings/mine/confirmation — the document itself is shared code in
+ * lib/ticket.js. Behind requireAdmin like everything else in this file.
+ */
+router.get(
+  '/bookings/:reference/ticket',
+  asyncRoute(async (req, res) => {
+    const reference = String(req.params.reference).trim();
+
+    const holder = await db.queryOne(
+      `SELECT u.id, u.full_name, u.whatsapp_number
+         FROM bookings b JOIN users u ON u.id = b.user_id
+        WHERE b.booking_reference = ? AND b.status IN ${bookingService.ACTIVE}
+        LIMIT 1`,
+      [reference],
+    );
+    if (!holder) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+
+    const party = await bookingService.getBookingByReference(reference);
+    if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+
+    res.type('html').send(renderTicket(party, holder));
   }),
 );
 

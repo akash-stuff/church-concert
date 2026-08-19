@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="A string ensemble under stage lights">
+  <defs>
+    <linearGradient id="st-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101c31"/>
+      <stop offset="1" stop-color="#1f3053"/>
+    </linearGradient>
+    <linearGradient id="st-beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e0ac4c" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#e0ac4c" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="st-wood" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d09a4a"/>
+      <stop offset="1" stop-color="#95601f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="800" height="450" fill="url(#st-bg)"/>
+
+  <!-- Three stage beams from above. -->
+  <g>
+    <path d="M180 0l90 450H70z" fill="url(#st-beam)"/>
+    <path d="M400 0l110 450H290z" fill="url(#st-beam)"/>
+    <path d="M620 0l110 450H530z" fill="url(#st-beam)"/>
+  </g>
+
+  <!-- Back wall pipework, suggesting an organ loft behind the players. -->
+  <g fill="#0b1322" opacity=".55">
+    <rect x="120" y="60" width="16" height="150" rx="8"/>
+    <rect x="146" y="40" width="16" height="170" rx="8"/>
+    <rect x="172" y="72" width="16" height="138" rx="8"/>
+    <rect x="612" y="72" width="16" height="138" rx="8"/>
+    <rect x="638" y="40" width="16" height="170" rx="8"/>
+    <rect x="664" y="60" width="16" height="150" rx="8"/>
+  </g>
+
+  <!-- Stage floor. -->
+  <path d="M0 356h800v94H0z" fill="#0b1322"/>
+  <path d="M0 356h800v10H0z" fill="#e0ac4c" opacity=".22"/>
+
+  <!-- A cello, centre, drawn large enough to be recognisable at card size. -->
+  <g transform="translate(400 236)">
+    <path d="M0-96c22 0 34 18 34 36 0 12-6 21-14 27 14 8 24 24 24 43 0 27-19 46-44 46s-44-19-44-46c0-19 10-35 24-43-8-6-14-15-14-27 0-18 12-36 34-36z" fill="url(#st-wood)"/>
+    <rect x="-4" y="-150" width="8" height="60" rx="3" fill="#5c3a12"/>
+    <path d="M-3-152h6l3-10h-12z" fill="#3d2708"/>
+    <path d="M0-90v130" stroke="#3d2708" stroke-width="2" opacity=".7"/>
+    <path d="M-18-4c-3 10-3 20 0 30M18-4c3 10 3 20 0 30" stroke="#3d2708" stroke-width="2.5" fill="none" opacity=".75"/>
+  </g>
+
+  <!-- Two violinists flanking, in silhouette with gold-lit bows. -->
+  <g fill="#0b1322">
+    <circle cx="212" cy="262" r="22"/><rect x="186" y="286" width="52" height="76" rx="20"/>
+    <circle cx="588" cy="262" r="22"/><rect x="562" y="286" width="52" height="76" rx="20"/>
+  </g>
+  <g stroke="#e0ac4c" stroke-width="4" stroke-linecap="round">
+    <path d="M182 300l64-26"/>
+    <path d="M618 300l-64-26"/>
+  </g>
+  <g fill="url(#st-wood)">
+    <path d="M244 268c8 0 12 7 12 13s-4 12-10 14c5 3 8 9 8 15 0 10-7 17-17 17s-17-7-17-17c0-6 3-12 8-15-6-2-10-8-10-14s4-13 12-13z" transform="translate(-14 -6) scale(.72) translate(70 90)"/>
+    <path d="M556 268c8 0 12 7 12 13s-4 12-10 14c5 3 8 9 8 15 0 10-7 17-17 17s-17-7-17-17c0-6 3-12 8-15-6-2-10-8-10-14s4-13 12-13z" transform="translate(14 -6) scale(.72) translate(216 90)"/>
+  </g>
+
+  <!-- Music stands. -->
+  <g stroke="#2c4066" stroke-width="4" fill="none">
+    <path d="M300 356v-42M282 314h36M300 314l-14-16h28z"/>
+    <path d="M500 356v-42M482 314h36M500 314l-14-16h28z"/>
+  </g>
+</svg>

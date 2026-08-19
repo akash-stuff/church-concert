@@ -440,10 +440,75 @@ and user agent.
 | `GET` | `/admin/audit-logs` | Activity trail |
 | `GET` | `/admin/settings` | Platform settings |
 | `PATCH` | `/admin/settings` | `minimum_age`, `require_whatsapp_verification`, `allow_user_self_cancel`, `duplicate_check_fields` |
+| `POST` | `/auth/admin/password` | Change your own password (`current_password`, `new_password`) |
+| `GET` | `/admin/bookings/:reference/ticket` | The printable confirmation for any party, as HTML |
+| `POST` | `/admin/concerts/:id/poster` | Upload a poster (`image` as a base64 data URI) |
+| `DELETE` | `/admin/concerts/:id/poster` | Clear it and fall back to bundled artwork |
+| `GET` | `/admin/console-notifications` | The staff feed. `category`, `unread`, `page`, `per_page` |
+| `GET` | `/admin/console-notifications/unread-count` | Just the badge number |
+| `PATCH` | `/admin/console-notifications/read-all` | Mark every notification read |
+| `PATCH` | `/admin/console-notifications/:id` | Mark one read or unread (`read`) |
+| `DELETE` | `/admin/console-notifications/:id` | Delete one |
+| `GET` | `/admin/analytics/bookings` | Day-by-day series. `days` (7–365), `concert_id` |
+| `GET` | `/admin/analytics/concerts` | One row per concert: capacity, seats by status, occupancy |
+| `GET` | `/admin/analytics/summary` | Totals for a window. `days`, `concert_id` |
 
 Every admin endpoint above is scoped by `?concert_id=`. Without it they fall
 back to the next upcoming concert, which is what the dashboard opens on. Creating
 sections, seats or manual bookings takes `concert_id` in the body.
+
+### Analytics
+
+Three read-only endpoints behind the console's charts and KPI cards.
+
+`analytics/bookings` returns `{ days, series }` where each point is
+`{ date, seats, bookings, cancellations }`. **Days with no activity are filled
+in as zeros** rather than omitted — a line chart with missing days draws a
+slope that is not there.
+
+`analytics/concerts` returns one row per concert with `total_seats`,
+`available_seats`, `reserved_seats`, `blocked_seats`, `booked_seats`, `parties`,
+`cancellations` and a computed `occupancy` percentage.
+
+`analytics/summary` returns `bookings`, `seats`, `capacity` and `people` blocks
+for the window. The shape is identical with or without `concert_id`, so callers
+do not branch on it.
+
+None of these report revenue: admission is free and no price exists in the
+schema. See "On money" in the README.
+
+### Console notifications
+
+Staff-facing, and **not** the same thing as `/admin/notifications`, which is the
+outbound WhatsApp and email delivery log addressed to attendees. These are the
+console's own feed — "New booking received" — written by
+`src/services/console-feed.js` when a booking is created or cancelled, when a
+concert crosses 80% or 95% capacity, or when a delivery fails.
+
+The capacity warning is raised **once per threshold per concert**, not on every
+booking; without that de-duplication the feed would fill with the same warning
+exactly as the last seats went.
+
+`GET /admin/console-notifications` also returns a `counts` block —
+`{ by_category, unread, total }` — so the category chips and the header bell can
+be drawn from one round trip.
+
+### Poster upload
+
+`POST /admin/concerts/:id/poster` takes `{ "image": "data:image/png;base64,…" }`.
+This one endpoint gets a 3 MB body limit; everything else on the API is held to
+100 KB.
+
+Accepted types are **PNG, JPEG and WebP only**. SVG is refused deliberately: it
+is a document that can carry script, and posters are served same-origin from
+pages whose CSP trusts `'self'`. The stored filename is generated server-side
+from the concert id and a random token, so nothing client-supplied reaches the
+filesystem. Replacing a poster deletes the file it supersedes, but only ever
+inside `assets/posters/uploads/`.
+
+`PATCH /admin/concerts/:id` also accepts `poster_path` for choosing one of the
+bundled illustrations. It is validated against
+`^/assets/posters/[A-Za-z0-9._/-]+\.(svg|png|jpg|jpeg|webp)$` and rejects `..`.
 
 ### Exports
 

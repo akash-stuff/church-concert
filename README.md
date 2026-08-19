@@ -133,6 +133,72 @@ without further editing.
 
 ---
 
+## The staff console
+
+`/admin/` is a single page with a sidebar, eight panels and no router. Each
+panel fetches its own data the first time it is opened and caches it until
+something invalidates it, so moving between them does not re-query the server.
+The hash keeps the current panel across a reload.
+
+| Panel | What it is for |
+| --- | --- |
+| Overview | KPI row, day-by-day booking chart, upcoming concerts, recent bookings, quick actions |
+| Concerts | Card and table views, search and filters, create/edit/duplicate/archive, poster chooser |
+| Seat Management | The interactive auditorium: zoom, section filter, seat search, and an inspector for the selected seat |
+| Bookings | Filterable table, and a details drawer with customer, concert, seat, ticket and timeline |
+| Attendees | Everyone registered, with a drawer showing their contact details and booking history |
+| Notifications | The staff feed, by category, with read state and an unread badge on the bell |
+| Reports & Export | Booking trend, occupancy, per-concert performance, and CSV / Excel / PDF export |
+| Settings | Branding, concert rules, email, WhatsApp, and your own password |
+
+Two things about it are worth knowing before changing it:
+
+- **Loaders must not bind event listeners directly.** A loader re-runs whenever
+  its panel is invalidated, so a listener added inside one stacks up: after
+  three reloads a single keypress in a search box fires three renders. Wrap any
+  binding in the `once(key, fn)` helper.
+- **There is no charting library.** `public/js/ui.js` builds line, ranking and
+  proportion charts as inline SVG, because the CSP allows scripts from `'self'`
+  only and a bar chart is not worth a bundle. Chart colours are set in CSS, not
+  in the JS, so the palette stays in one file.
+
+### On money, and what these screens deliberately do not show
+
+This is a free-admission system. There is no price, payment or revenue column
+anywhere in the schema, and the public site promises there is no payment step.
+So the console reports **occupancy, capacity, cancellation rate and WhatsApp
+delivery** where a commercial ticketing dashboard would report revenue. Nothing
+on screen is a placeholder for a number that does not exist.
+
+If ticketing ever does become paid, that is a migration adding price to
+`sections` and amount/payment status to `bookings`, plus the booking service —
+not a UI change.
+
+### Notifications: two different things with similar names
+
+- `notifications` is the **outbound delivery log** — WhatsApp and email sent to
+  attendees, with a provider message id and a QUEUED/SENT/FAILED state.
+- `admin_notifications` is the **console's own feed** — "New booking received",
+  addressed to staff, read in a browser, with no channel and no delivery state.
+
+They are separate tables on purpose. Folding them together would produce one
+table where half the columns are always NULL depending on which kind of row it
+is. `src/services/console-feed.js` writes the second kind; every call is
+best-effort and swallows its own errors, because a feed entry failing must never
+fail the booking that produced it.
+
+### Concert posters
+
+`concerts.poster_path` is always a path under `/assets`, never a URL — the CSP
+allows images from `'self'` and `data:` only. A concert without one falls back
+to bundled artwork chosen from its id, so it always draws the same picture.
+Uploads (`POST /api/admin/concerts/:id/poster`) accept PNG, JPEG and WebP up to
+2 MB, sent as a base64 data URI. **SVG uploads are refused on purpose**: an SVG
+is a document that can carry script, and these files are served same-origin from
+a page whose CSP trusts `'self'`.
+
+---
+
 ## How the important part works
 
 Two people tapping the same seat at the same moment is the whole problem. This
@@ -190,46 +256,104 @@ someone already holds.
 
 ```
 migrations/     001_init.sql (schema), 002_defaults.sql (seed data),
-                003_multi_concert.sql (several concerts, seats per person)
+                003_multi_concert.sql (several concerts, seats per person),
+                004_admin_console.sql (concert posters, staff notification feed)
 scripts/        migrate, seed-admin, seed-seats, syntax-check, tests
 src/
   env.js        config loading and validation
   db.js         pool, transaction with retry and isolation
-  lib/          helpers, zod schemas, audit log and settings
+  lib/          helpers, zod schemas, audit log and settings,
+                ticket.js (the printable confirmation, shared by two routes)
   middleware/   auth (sessions, RBAC), security (CSRF, rate limits, errors)
-  services/     booking (the transaction), whatsapp, notifications
+  services/     booking (the transaction), whatsapp, notifications,
+                console-feed (staff-facing notifications)
   routes/       auth, app, admin, webhook
-public/         pages, css/app.css, js/, admin/, assets/ (SVG artwork)
+public/
+  css/app.css   one stylesheet, three layers — see Design below
+  js/           core.js (shared helpers), ui.js (toasts, drawer, dialog,
+                charts), one file per attendee page
+  admin/        the staff console: index.html + admin.js, and login
+  assets/       SVG artwork, icons/ (masked line icons), posters/
 docs/API.md     full endpoint reference
 ```
 
 ## Design
 
-Blue on white. The page is a very pale blue (`#f5f8ff`), cards are white, and a
-single saturated blue — `#2563eb`, with `#1d4ed8` for hover and headline accents
-— carries every action: primary buttons, the seat you have chosen, live figures.
-Nothing else competes, so the seat map is the busiest thing on any screen. Plus
-Jakarta Sans sets headings and figures, Inter sets the reading copy, and IBM Plex
-Mono is kept for booking references, because those are codes read aloud at a door.
+Deep navy on soft neutrals, with warm gold as the counter-accent.
+
+Navy (`#16233d`, ramped to `#0d1729`) does the structure: the console sidebar,
+the stage on a seat plan, the fill of a booked seat. It is the colour the
+application is *made of*, not a highlight. Gold (`#b58328`) is rationed to
+things that are genuinely primary — the primary button, the selected state, the
+one metric on a card that matters — and it is never the only signal for
+anything: every gold state also carries a label, a glyph, or a weight change.
+Surfaces run white → `#f4f6f9` with a faint navy cast, so a card reads as
+lifted without needing a heavy shadow. Plus Jakarta Sans sets headings and
+figures, Inter sets the reading copy, and IBM Plex Mono is kept for booking
+references, because those are codes read aloud at a door.
+
+Spacing is an 8px scale (`--space-1` … `--space-8`). Every margin, gap and pad
+in the console comes from it, which is what keeps eight unrelated screens
+feeling like one product.
 
 Status colours are conventional so they need no legend to interpret: green for
 confirmed and verified, amber for held or pending, red for cancelled and full.
+
+Every form field carries a leading mark — a person for a name, a handset for a
+phone, a padlock for a password — so a long registration form can be scanned
+rather than read. The mark is a CSS mask over an SVG in `public/assets/icons/`,
+which is why it can turn indigo on focus and red when the field is rejected
+without a second file. The markup for one field is:
+
+```html
+<div class="field">
+  <label for="email">Email address</label>
+  <span class="field__control field__control--inline">
+    <span class="field__icon" data-icon="mail" aria-hidden="true"></span>
+    <input id="email" name="email" type="email" required />
+  </span>
+  <span class="field__error" data-error-for="email"></span>
+</div>
+```
+
+`--inline` centres the mark; leave it off for a `textarea` so the mark sits on
+the first line. Add `<span class="field__chevron">` after a `<select>` for the
+custom arrow. `core.js` mounts the password reveal button itself, so any
+`input[type=password]` inside a `.field__control` gets one for free.
+
+Motion is used for arrival and feedback, not decoration: page furniture rises in
+on load, the seat plan draws itself in, buttons take a sheen on hover and a
+spinner while a request is in flight, and the chosen seat pulses. All of it is
+switched off under `prefers-reduced-motion`, and nothing is animated that a
+reader has to wait for in order to understand the page.
 
 Artwork lives in `public/assets/` — hand-drawn SVG, no external requests, which
 suits the CSP that allows images from `'self'` and `data:` only. See
 `public/assets/README.md` for what each file is and where it appears.
 
-Three details worth knowing if you restyle it:
+Four details worth knowing if you restyle it:
 
-- **All colour is declared once,** in the `:root` block at the top of
-  `public/css/app.css`. The SVGs in `public/assets/` are the exception: their
-  colours are baked in and have to be edited alongside the tokens.
+- **The stylesheet is three layers,** in one file, in this order:
+  1. the structural rules — layout, spacing, what an element *is*;
+  2. `PREMIUM LAYER` — re-tunes the tokens and adds the finish for the
+     attendee-facing site;
+  3. `CONSOLE LAYER` — the staff console: shell, primitives, screens.
+
+  Both later layers declare `:root`; the last one wins, so the `CONSOLE LAYER`
+  block is the palette in effect everywhere, attendee pages included. That is
+  deliberate — one identity, not two.
+- **There are no `style=""` attributes anywhere in `public/`,** and there must
+  not be: the CSP sets `style-src 'self'` with no `'unsafe-inline'`, so an
+  inline style is silently dropped by the browser. Use a class — the small
+  helpers (`.mt-md`, `.m-0`, `.text-sm`, `.form-narrow`, `.measure`) exist for
+  exactly the one-off cases that would otherwise reach for one.
 - **Printing strips the decoration.** The `@media print` block drops the
   masthead, artwork and buttons and prints the details black on white, so a
   confirmation costs one sheet and no colour ink.
 - **A seat you hold is outlined in green with a tick, not just tinted.** Chosen
-  seats are a solid blue fill; the tick survives greyscale printing and works for
-  anyone who cannot separate green from blue.
+  seats are a solid indigo fill; the tick survives greyscale printing and works
+  for anyone who cannot separate green from indigo. This is the one element the
+  premium layer deliberately leaves alone.
 
 ## Security notes
 
