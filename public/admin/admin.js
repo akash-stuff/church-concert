@@ -150,6 +150,12 @@
     return '';
   }
 
+  /** The server's real complaint, when it gave one. */
+  function causeOf(error) {
+    if (!error?.serverStack) return null;
+    return String(error.serverStack).split('\n')[0].trim();
+  }
+
   /** Report a failed request once, in the way that suits where it happened. */
   function fail(error, context) {
     if (error?.status === 401) {
@@ -157,8 +163,43 @@
       return;
     }
     console.error(`[console] ${context}:`, error);
-    UI.toastError(context, error?.message || 'Something went wrong.');
+    // A 500 says "something went wrong on our side" and nothing else, which is
+    // right for an attendee and useless for staff. The stack's first line names
+    // the actual fault and is only present outside production.
+    const cause = causeOf(error);
+    UI.toastError(context, cause || error?.message || 'Something went wrong.');
   }
+
+  /**
+   * Paint a panel's own failure state, so a load that did not work stops
+   * looking like a load that has not finished. Left as skeletons, the console
+   * appears to be hanging forever.
+   */
+  function failPanel(tab, error) {
+    const target = PANEL_BODY[tab] && $(PANEL_BODY[tab]);
+    if (!target) return;
+    UI.failure(target, {
+      title: `Could not load ${PANELS[tab].title}`,
+      message:
+        error?.status >= 500
+          ? 'The server could not answer. Nothing has been changed.'
+          : error?.message || 'The request did not go through.',
+      detail: error?.serverStack || null,
+      onRetry: () => load(tab, { force: true }),
+    });
+  }
+
+  /** Where a panel's failure state goes when its data will not load. */
+  const PANEL_BODY = {
+    overview: '[data-kpis]',
+    concerts: '[data-concerts-view]',
+    seats: '[data-viewport]',
+    bookings: '[data-bookings-table]',
+    attendees: '[data-users-table]',
+    notifications: '[data-notif-list]',
+    reports: '[data-report-kpis]',
+    settings: '[data-settings-body]',
+  };
 
   const setWidth = (node, percent) => {
     node.style.width = `${Math.max(0, Math.min(100, percent))}%`;
@@ -294,6 +335,7 @@
     LOADERS[tab]?.().catch((error) => {
       state.loaded[tab] = false;
       fail(error, `Could not load ${PANELS[tab].title}`);
+      failPanel(tab, error);
     });
   }
 
@@ -1656,7 +1698,7 @@
   }
 
   const currentConcertName = (row) =>
-    state.concerts.find((c) => c.id === row.concert_id)?.name || '—';
+    row.concert_name || state.concerts.find((c) => c.id === row.concert_id)?.name || '—';
 
   async function loadBookings() {
     await renderBookings();
@@ -1681,25 +1723,21 @@
     const box = $('[data-bookings-table]');
     UI.skeleton(box, { kind: 'row', count: 8 });
 
+    // Every filter goes to the server. Filtering here instead would drop rows
+    // out of an already-paginated page, so the count under the table would stop
+    // matching the rows above it.
     const params = new URLSearchParams({ page: String(state.bookings.page), per_page: '25' });
     const search = $('[data-booking-search]')?.value.trim();
     const status = $('[data-booking-status]')?.value;
-    if (search) params.set('search', search);
-    if (status) params.set('status', status);
-
-    const { bookings, pagination } = await api(`/api/admin/bookings?${params}`);
-
-    // Concert and delivery filters are applied here rather than server-side:
-    // the endpoint does not take them, and the page size is small enough that
-    // filtering the page is honest as long as the pager reflects it.
     const concertFilter = $('[data-booking-concert]')?.value;
     const whatsappFilter = $('[data-booking-whatsapp]')?.value;
-    const rows = bookings.filter((row) => {
-      if (concertFilter && String(row.concert_id) !== concertFilter) return false;
-      if (whatsappFilter === 'verified' && !row.whatsapp_verified) return false;
-      if (whatsappFilter === 'unverified' && row.whatsapp_verified) return false;
-      return true;
-    });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (concertFilter) params.set('concert_id', concertFilter);
+    if (whatsappFilter === 'verified') params.set('verified', 'true');
+    if (whatsappFilter === 'unverified') params.set('verified', 'false');
+
+    const { bookings: rows, pagination } = await api(`/api/admin/bookings?${params}`);
 
     box.textContent = '';
     if (!rows.length) {

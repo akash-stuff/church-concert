@@ -13,7 +13,7 @@
 
 const crypto = require('crypto');
 
-const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
+const BASE = process.env.TEST_BASE_URL || 'https://church-concert-20gs.onrender.com';
 const CONTENDERS = Number(process.env.STRESS_CONTENDERS || 20);
 
 const stamp = Date.now().toString().slice(-5);

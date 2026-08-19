@@ -41,10 +41,30 @@ const resolveConcert = (req) => {
   return raw ? bookingService.getConcert(Number(raw)) : bookingService.getDefaultConcert();
 };
 
+/**
+ * Paging, and the LIMIT clause to go with it.
+ *
+ * `limit` is interpolated into the SQL rather than bound as `LIMIT ? OFFSET ?`.
+ * That is not an oversight: db.query uses pool.execute(), i.e. real prepared
+ * statements, and MySQL rejects placeholders in LIMIT there — every paginated
+ * endpoint failed with "Incorrect arguments to mysqld_stmt_execute" (errno
+ * 1210) while the unpaginated ones were fine.
+ *
+ * Interpolating is safe *because of the two lines above it*: both numbers come
+ * out of Number.parseInt and are then clamped, so they can only ever be
+ * integers in [1, ∞) and [5, 100]. Nothing a caller sends survives into the
+ * string. Building the clause here rather than at each call site is the point —
+ * it keeps that guarantee in one place instead of five.
+ */
 const pageParams = (req, defaultSize = 25) => {
-  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  // The upper clamp on `page` is what keeps `offset` a plain integer. Without
+  // it, ?page=99999999999999999999 makes offset exceed MAX_SAFE_INTEGER, which
+  // stringifies as "1e+22" and lands in the SQL as a syntax error — a 500 any
+  // caller could trigger at will. A million pages is far past anything real.
+  const page = Math.min(1_000_000, Math.max(1, Number.parseInt(req.query.page, 10) || 1));
   const size = Math.min(100, Math.max(5, Number.parseInt(req.query.per_page, 10) || defaultSize));
-  return { page, size, offset: (page - 1) * size };
+  const offset = (page - 1) * size;
+  return { page, size, offset, limit: `LIMIT ${size} OFFSET ${offset}` };
 };
 
 router.get(
@@ -105,7 +125,7 @@ router.get(
 router.get(
   '/users',
   asyncRoute(async (req, res) => {
-    const { page, size, offset } = pageParams(req);
+    const { page, size, limit } = pageParams(req);
     const where = [];
     const params = [];
 
@@ -116,35 +136,51 @@ router.get(
     }
     if (req.query.status === 'active') where.push('u.is_active = 1');
     if (req.query.status === 'disabled') where.push('u.is_active = 0');
-    if (req.query.verified === 'yes') where.push('u.whatsapp_verified = 1');
-    if (req.query.verified === 'no') where.push('u.whatsapp_verified = 0');
-    if (req.query.booked === 'yes') where.push('b.id IS NOT NULL');
-    if (req.query.booked === 'no') where.push('b.id IS NULL');
+    // Both spellings are accepted. The console sends true/false; the older UI
+    // sent yes/no, and a filter that quietly does nothing is worse than either.
+    const yes = (value) => value === 'yes' || value === 'true';
+    const no = (value) => value === 'no' || value === 'false';
+    if (yes(req.query.verified)) where.push('u.whatsapp_verified = 1');
+    if (no(req.query.verified)) where.push('u.whatsapp_verified = 0');
+
+    // Seats held is a correlated count, not a join.
+    //
+    // The join this replaces produced one row per seat: somebody holding four
+    // seats appeared four times, the page showed fewer than `per_page` distinct
+    // people, and `total` counted seat rows rather than accounts — so the pager
+    // reported a number that could never be reached.
+    const heldSeats = `(SELECT COUNT(*) FROM bookings b
+                         WHERE b.user_id = u.id AND b.status IN ${bookingService.ACTIVE})`;
+    if (yes(req.query.booked)) where.push(`${heldSeats} > 0`);
+    if (no(req.query.booked)) where.push(`${heldSeats} = 0`);
 
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const rows = await db.query(
       `SELECT u.id, u.full_name, u.email, u.mobile_number, u.whatsapp_number, u.date_of_birth,
               u.gender, u.whatsapp_verified, u.is_active, u.created_at, u.last_login_at,
-              b.booking_reference, b.status AS booking_status, s.seat_number
+              ${heldSeats} AS live_seats,
+              (SELECT COUNT(DISTINCT b.booking_reference) FROM bookings b
+                WHERE b.user_id = u.id AND b.status IN ${bookingService.ACTIVE}) AS live_bookings
          FROM users u
-         LEFT JOIN bookings b ON b.user_id = u.id AND b.status IN ${bookingService.ACTIVE}
-         LEFT JOIN seats s ON s.id = b.seat_id
          ${clause}
          ORDER BY u.id DESC
-         LIMIT ? OFFSET ?`,
-      [...params, size, offset],
+         ${limit}`,
+      params,
     );
 
     const total = await db.queryOne(
-      `SELECT COUNT(*) AS count FROM users u
-         LEFT JOIN bookings b ON b.user_id = u.id AND b.status IN ${bookingService.ACTIVE}
-         ${clause}`,
+      `SELECT COUNT(*) AS count FROM users u ${clause}`,
       params,
     );
 
     res.json({
-      users: rows.map((u) => ({ ...u, age: ageOn(u.date_of_birth) })),
+      users: rows.map((u) => ({
+        ...u,
+        age: ageOn(u.date_of_birth),
+        live_seats: Number(u.live_seats),
+        live_bookings: Number(u.live_bookings),
+      })),
       pagination: { page, per_page: size, total: Number(total.count) },
     });
   }),
@@ -227,7 +263,7 @@ router.patch(
 router.get(
   '/bookings',
   asyncRoute(async (req, res) => {
-    const { page, size, offset } = pageParams(req);
+    const { page, size, limit } = pageParams(req);
     const where = [];
     const params = [];
 
@@ -240,20 +276,32 @@ router.get(
       where.push('b.status = ?');
       params.push(String(req.query.status).toUpperCase());
     }
+    // Filtering by concert belongs here rather than in the browser: doing it on
+    // the page silently drops rows out of an already-paginated result, so the
+    // count under the table stops matching what is in it.
+    if (req.query.concert_id) {
+      where.push('b.concert_id = ?');
+      params.push(Number(req.query.concert_id));
+    }
+    if (req.query.verified === 'true') where.push('u.whatsapp_verified = 1');
+    if (req.query.verified === 'false') where.push('u.whatsapp_verified = 0');
+
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
     const rows = await db.query(
       `SELECT b.id, b.booking_reference, b.status, b.source, b.created_at, b.confirmed_at,
               b.cancelled_at, b.cancelled_by, b.cancel_reason, b.note,
+              b.concert_id, c.name AS concert_name,
               s.id AS seat_id, s.seat_number, sec.name AS section_name,
               u.id AS user_id, u.full_name, u.email, u.whatsapp_number, u.whatsapp_verified
          FROM bookings b
          JOIN seats s ON s.id = b.seat_id
          JOIN sections sec ON sec.id = s.section_id
          JOIN users u ON u.id = b.user_id
+         JOIN concerts c ON c.id = b.concert_id
          ${clause}
-         ORDER BY b.id DESC LIMIT ? OFFSET ?`,
-      [...params, size, offset],
+         ORDER BY b.id DESC ${limit}`,
+      params,
     );
 
     const total = await db.queryOne(
@@ -1122,7 +1170,7 @@ router.get(
 router.get(
   '/notifications',
   asyncRoute(async (req, res) => {
-    const { page, size, offset } = pageParams(req);
+    const { page, size, limit } = pageParams(req);
     const where = [];
     const params = [];
 
@@ -1146,8 +1194,8 @@ router.get(
               n.created_at, n.body, u.full_name
          FROM notifications n LEFT JOIN users u ON u.id = n.user_id
          ${clause}
-         ORDER BY n.id DESC LIMIT ? OFFSET ?`,
-      [...params, size, offset],
+         ORDER BY n.id DESC ${limit}`,
+      params,
     );
 
     const total = await db.queryOne(
@@ -1165,7 +1213,7 @@ router.get(
 router.get(
   '/audit-logs',
   asyncRoute(async (req, res) => {
-    const { page, size, offset } = pageParams(req);
+    const { page, size, limit } = pageParams(req);
     const where = [];
     const params = [];
     if (req.query.action) {
@@ -1177,8 +1225,8 @@ router.get(
     const rows = await db.query(
       `SELECT id, actor_type, actor_id, actor_label, action, entity_type, entity_id,
               metadata, ip_address, created_at
-         FROM audit_logs ${clause} ORDER BY id DESC LIMIT ? OFFSET ?`,
-      [...params, size, offset],
+         FROM audit_logs ${clause} ORDER BY id DESC ${limit}`,
+      params,
     );
     const total = await db.queryOne(`SELECT COUNT(*) AS count FROM audit_logs ${clause}`, params);
 
@@ -1256,7 +1304,7 @@ router.post(
 router.get(
   '/console-notifications',
   asyncRoute(async (req, res) => {
-    const { page, size, offset } = pageParams(req, 20);
+    const { page, size, limit } = pageParams(req, 20);
     const where = [];
     const params = [];
 
@@ -1275,8 +1323,8 @@ router.get(
          FROM admin_notifications n
          LEFT JOIN concerts c ON c.id = n.concert_id
          ${clause}
-        ORDER BY n.id DESC LIMIT ? OFFSET ?`,
-      [...params, size, offset],
+        ORDER BY n.id DESC ${limit}`,
+      params,
     );
 
     const total = await db.queryOne(

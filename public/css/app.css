@@ -5386,3 +5386,59 @@ input[type='search'] {
 [data-tone='accent'] {
   background: var(--accent);
 }
+
+/* --- Failure states --------------------------------------------------------
+   A panel whose data would not load. Distinct from `.empty`, which means
+   "nothing here yet" — this one means "we could not find out", and says so
+   rather than leaving skeletons shimmering forever.
+   ------------------------------------------------------------------------- */
+
+.empty--error .empty__art {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.empty__detail {
+  margin-top: var(--space-5);
+  text-align: left;
+  font-size: 0.75rem;
+}
+.empty__detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  padding: var(--space-2) 0;
+}
+.empty__detail summary:hover {
+  color: var(--ink);
+}
+.empty__detail pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--body-ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* How many times a repeated toast has fired, instead of stacking copies. */
+.toast__repeat:empty {
+  display: none;
+}
+.toast__repeat {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+  color: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}

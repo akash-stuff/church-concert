@@ -66,15 +66,41 @@
    * something went wrong is not a message to time out from under someone who
    * looked away.
    */
-  function toast(title, { body = '', kind = 'info', duration } = {}) {
+  function toast(title, { body = '', kind = 'info', duration, key } = {}) {
     const stack = toastStack();
-    const node = el('div', { class: `toast toast--${kind}`, role: kind === 'error' ? 'alert' : 'status' }, [
-      el('span', { class: 'toast__icon', 'aria-hidden': 'true' }),
-      el('span', { class: 'toast__text' }, [
-        el('strong', { class: 'toast__title', text: title }),
-        body ? el('span', { class: 'toast__body', text: body }) : null,
-      ]),
-    ]);
+
+    // Repeated failures produce the same message over and over — a retried
+    // panel load will queue five identical toasts and bury the page under them.
+    // An existing toast with the same identity is bumped with a counter rather
+    // than duplicated.
+    const identity = key ?? `${kind}:${title}:${body}`;
+    const existing = stack.querySelector(`[data-toast-key="${CSS.escape(identity)}"]`);
+    if (existing) {
+      const count = Number(existing.dataset.toastCount || '1') + 1;
+      existing.dataset.toastCount = String(count);
+      const badge = existing.querySelector('.toast__repeat');
+      if (badge) badge.textContent = `×${count}`;
+      return () => existing.remove();
+    }
+    const node = el(
+      'div',
+      {
+        class: `toast toast--${kind}`,
+        role: kind === 'error' ? 'alert' : 'status',
+        'data-toast-key': identity,
+        'data-toast-count': '1',
+      },
+      [
+        el('span', { class: 'toast__icon', 'aria-hidden': 'true' }),
+        el('span', { class: 'toast__text' }, [
+          el('strong', { class: 'toast__title' }, [
+            title,
+            el('span', { class: 'toast__repeat' }),
+          ]),
+          body ? el('span', { class: 'toast__body', text: body }) : null,
+        ]),
+      ],
+    );
 
     const close = el('button', {
       type: 'button',
@@ -225,6 +251,44 @@
     for (let i = 0; i < count; i += 1) {
       container.append(el('div', { class: `sk sk--${kind}` }));
     }
+  }
+
+  /**
+   * What a panel shows when its data would not load. Distinct from `empty`,
+   * which means "nothing here yet" — this means "we could not find out", and
+   * the difference matters: one is the end of the story and the other has a
+   * retry.
+   */
+  function failure(container, { title, message, detail, onRetry } = {}) {
+    container.textContent = '';
+    const node = el('div', { class: 'empty empty--error' }, [
+      el('div', { class: 'empty__art', 'aria-hidden': 'true' }),
+      el('h3', { text: title || 'That did not load' }),
+      message ? el('p', { text: message }) : null,
+    ]);
+    node.style.setProperty('--empty-icon', "url('/assets/icons/alert.svg')");
+
+    if (onRetry) {
+      node.append(
+        el('button', {
+          type: 'button',
+          class: 'btn btn--primary btn--small',
+          text: 'Try again',
+          onClick: onRetry,
+        }),
+      );
+    }
+    // The server's own words, when it gave any. Collapsed, because it is for
+    // whoever is diagnosing rather than whoever is booking seats.
+    if (detail) {
+      node.append(
+        el('details', { class: 'empty__detail' }, [
+          el('summary', { text: 'Technical detail' }),
+          el('pre', { text: detail }),
+        ]),
+      );
+    }
+    container.append(node);
   }
 
   function empty(container, { title, message, icon = 'info', action } = {}) {
@@ -464,6 +528,7 @@
     confirm,
     skeleton,
     empty,
+    failure,
     lineChart,
     rankChart,
     stackChart,

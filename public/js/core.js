@@ -44,6 +44,10 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
     error.status = response.status;
     error.code = data?.error?.code;
     error.details = data?.error?.details;
+    // Outside production the API returns the server-side stack on a 5xx. Keep
+    // it on the error so a panel can show it instead of leaving whoever is
+    // debugging to go and read the server log.
+    error.serverStack = data?.error?.stack;
     throw error;
   }
   return data;

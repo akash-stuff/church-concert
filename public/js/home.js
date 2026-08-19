@@ -13,7 +13,18 @@
     return;
   }
 
-  const { concert, availability } = data;
+  // A 200 that is not the shape we expect — a proxy error page, a changed
+  // endpoint — used to throw on `concert.name` and leave the hero blank with an
+  // unhandled rejection in the console. Say so instead.
+  const { concert, availability } = data || {};
+  if (!concert) {
+    notify(
+      '[data-notice]',
+      'We could not load the concert details just now. Refresh the page to try again.',
+      'error',
+    );
+    return;
+  }
 
   document.title = `${concert.name} — reserve a seat`;
   const mark = $('.masthead__name');

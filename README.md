@@ -237,7 +237,16 @@ The hash keeps the current panel across a reload.
 | Reports & Export | Booking trend, occupancy, per-concert performance, and CSV / Excel / PDF export |
 | Settings | Branding, concert rules, email, WhatsApp, and your own password |
 
-Two things about it are worth knowing before changing it:
+Three things about it are worth knowing before changing it:
+
+- **Paginated queries must not bind `LIMIT ?`.** `db.query` runs
+  `pool.execute()`, i.e. real prepared statements, and MySQL rejects
+  placeholders in `LIMIT` there — every paginated endpoint 500s with
+  `Incorrect arguments to mysqld_stmt_execute` while the unpaginated ones carry
+  on working, which makes it look like a few specific screens are broken rather
+  than one shared helper. Take the ready-made clause from `pageParams(req)` and
+  interpolate it (`${limit}`); it is built from two clamped integers, so nothing
+  a caller sends can reach the SQL.
 
 - **Loaders must not bind event listeners directly.** A loader re-runs whenever
   its panel is invalidated, so a listener added inside one stacks up: after
