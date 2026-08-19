@@ -40,7 +40,7 @@ const env = {
   nodeEnv,
   isProduction,
   appName: process.env.APP_NAME || 'Church Concert',
-  appUrl: (process.env.APP_URL || 'https://church-concert-20gs.onrender.com').replace(/\/$/, ''),
+  appUrl: (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, ''),
   port: int(process.env.PORT, 3000),
   trustProxy: bool(process.env.TRUST_PROXY, false),
 

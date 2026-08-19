@@ -12,7 +12,7 @@
  * against a scratch database, never production.
  */
 
-const BASE = process.env.TEST_BASE_URL || 'https://church-concert-20gs.onrender.com';
+const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
 
 let passed = 0;
 let failed = 0;
