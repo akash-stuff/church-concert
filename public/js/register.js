@@ -83,8 +83,12 @@
     busy(submit, true, 'Registering…');
     try {
       const result = await api('/api/auth/register', { method: 'POST', body: values });
-      const masked = result.whatsapp?.masked_number || 'your WhatsApp number';
-      sessionStorage.setItem('cc_verify_hint', masked);
+      // The server says which channels actually took the code; carry that
+      // sentence over rather than re-deriving it on the next page.
+      sessionStorage.setItem(
+        'cc_verify_hint',
+        result.verification?.message || result.whatsapp?.masked_number || '',
+      );
       window.location.href = '/verify.html';
     } catch (error) {
       busy(submit, false);

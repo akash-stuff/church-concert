@@ -108,6 +108,21 @@ async function verifyWhatsapp(db, api, userId) {
 
 const crypto = require('crypto');
 
+/**
+ * Poll until `probe` returns something truthy, or give up. For assertions about
+ * work the server deliberately does after replying.
+ */
+async function waitFor(probe, { attempts = 20, delayMs = 50 } = {}) {
+  for (let i = 0; i < attempts; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await probe();
+    if (result) return result;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return null;
+}
+
 async function currentCode(db, userId) {
   // The database stores only a hash, so brute-force the 6-digit space against
   // it. Test-only: it is how we learn the code the mock driver "sent".
@@ -204,7 +219,16 @@ async function main() {
   if (!Number.isInteger(aliceId)) {
     throw new Error(`cannot continue without a registered user: ${JSON.stringify(registered.data)}`);
   }
-  check('a verification code was issued', registered.data.whatsapp?.sent === true);
+  check('a verification code was issued', registered.data.verification?.sent === true);
+  check(
+    'the code went out on both channels',
+    registered.data.verification?.channels?.whatsapp?.sent === true &&
+      registered.data.verification?.channels?.email?.sent === true,
+    JSON.stringify(registered.data.verification?.channels),
+  );
+  // The legacy `whatsapp` block is a compatibility shim for older front ends;
+  // it is covered so that removing it cannot pass unnoticed.
+  check('the legacy whatsapp block is still present', registered.data.whatsapp?.sent === true);
 
   const dupe = client();
   await dupe.primeCsrf();
@@ -217,6 +241,94 @@ async function main() {
   const sharedPhone = { ...person('phonetwin'), whatsapp_number: aliceData.whatsapp_number };
   const dupePhone = await dupe.request('/api/auth/register', { method: 'POST', body: sharedPhone });
   check('a WhatsApp number cannot be reused', dupePhone.status === 409);
+
+  // -------------------------------------------------------------------------
+  console.log('\nPassword reset goes out by email, and only works once');
+
+  // The reply must not differ between a registered and an unknown address, or
+  // the endpoint becomes an account-enumeration oracle.
+  const forgotKnown = await anon.request('/api/auth/forgot-password', {
+    method: 'POST',
+    body: { email: aliceData.email },
+  });
+  const forgotUnknown = await anon.request('/api/auth/forgot-password', {
+    method: 'POST',
+    body: { email: `nobody-${stamp}@example.org` },
+  });
+  check(
+    'forgot-password accepts a registered address',
+    forgotKnown.status === 200 && forgotKnown.data.ok === true,
+    JSON.stringify(forgotKnown.data),
+  );
+  check(
+    'an unknown address gets the identical reply',
+    forgotUnknown.status === 200 &&
+      JSON.stringify(forgotUnknown.data) === JSON.stringify(forgotKnown.data),
+    `${JSON.stringify(forgotKnown.data)} vs ${JSON.stringify(forgotUnknown.data)}`,
+  );
+
+  // The link is delivered by email and nothing else. The route does not await
+  // the send — awaiting SMTP would leak whether the address exists through
+  // response timing — so poll briefly rather than reading once and racing it.
+  const resetNotifications = await waitFor(async () => {
+    const rows = await db.query(
+      `SELECT channel, recipient, status FROM notifications
+        WHERE user_id = ? AND type = 'PASSWORD_RESET' ORDER BY id DESC`,
+      [aliceId],
+    );
+    return rows.length ? rows : null;
+  });
+  check('a reset notification was recorded', Array.isArray(resetNotifications));
+  check(
+    'the reset link was sent by email',
+    (resetNotifications || []).some(
+      (row) => row.channel === 'EMAIL' && row.recipient === aliceData.email,
+    ),
+    JSON.stringify(resetNotifications),
+  );
+  check(
+    'the reset link was NOT sent over WhatsApp',
+    !(resetNotifications || []).some((row) => row.channel === 'WHATSAPP'),
+    JSON.stringify(resetNotifications),
+  );
+
+  // Only the hash is stored, so the test has to mint a token the same way the
+  // route does rather than reading one back out of the table.
+  const resetToken = crypto.randomBytes(24).toString('hex');
+  const resetHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+  await db.query(
+    `INSERT INTO password_resets (user_id, token_hash, expires_at)
+     VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))`,
+    [aliceId, resetHash],
+  );
+
+  const badToken = await anon.request('/api/auth/reset-password', {
+    method: 'POST',
+    body: { token: 'not-a-real-token', password: 'BrandNewPass1' },
+  });
+  check('an unknown reset token is refused', badToken.status === 400);
+
+  const newPassword = 'ResetPass99x';
+  const usedReset = await anon.request('/api/auth/reset-password', {
+    method: 'POST',
+    body: { token: resetToken, password: newPassword },
+  });
+  check('a valid reset token sets the new password', usedReset.status === 200, JSON.stringify(usedReset.data));
+
+  const replay = await anon.request('/api/auth/reset-password', {
+    method: 'POST',
+    body: { token: resetToken, password: 'AnotherPass1' },
+  });
+  check('the same reset token cannot be replayed', replay.status === 400);
+
+  // Signing back in proves the new password took, and re-arms `alice` for the
+  // checks that follow — the reset bumped token_version and signed her out.
+  const reLogin = await alice.request('/api/auth/login', {
+    method: 'POST',
+    body: { identifier: aliceData.email, password: newPassword },
+  });
+  check('the new password signs in', reLogin.status === 200, JSON.stringify(reLogin.data));
+  aliceData.password = newPassword;
 
   // -------------------------------------------------------------------------
   console.log('\nBooking is gated on WhatsApp verification');

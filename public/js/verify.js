@@ -12,10 +12,16 @@
     return;
   }
 
-  const masked = sessionStorage.getItem('cc_verify_hint') || session.user.whatsapp_masked;
-  if (masked) {
+  // Either the sentence the register endpoint handed back, or a fallback built
+  // from whatever the session knows.
+  const hint = sessionStorage.getItem('cc_verify_hint');
+  if (hint) {
     $('[data-verify-lede]').textContent =
-      `We sent a code to ${masked} on WhatsApp. Enter it below, or reply to the message and this page will catch up.`;
+      `${hint} You can also reply to the WhatsApp message and this page will catch up.`;
+  } else if (session.user.whatsapp_masked) {
+    $('[data-verify-lede]').textContent =
+      `We sent the same code to your email and to ${session.user.whatsapp_masked} on WhatsApp. ` +
+      'Enter it from whichever reaches you first.';
   }
 
   const form = $('#verify-form');

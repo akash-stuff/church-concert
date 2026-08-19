@@ -65,6 +65,25 @@ const env = {
     defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '',
   },
 
+  email: {
+    // gmail — Gmail SMTP with an App Password
+    // smtp  — any other SMTP server, for a church already running one
+    // mock  — logs the message instead of sending it, for local development
+    driver: (process.env.EMAIL_DRIVER || 'mock').toLowerCase(),
+    // Gmail ignores host/port and uses smtp.gmail.com; these are for `smtp`.
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: int(process.env.SMTP_PORT, 465),
+    secure: bool(process.env.SMTP_SECURE, true),
+    // For Gmail this is the full address, and the password is a 16-character
+    // App Password, never the account password — see README.
+    user: process.env.EMAIL_USER || '',
+    password: process.env.EMAIL_PASSWORD || '',
+    // Gmail rewrites From to the authenticated account unless the address is a
+    // verified alias, so this defaults to the account rather than pretending.
+    from: process.env.EMAIL_FROM || '',
+    replyTo: process.env.EMAIL_REPLY_TO || '',
+  },
+
   otp: {
     length: Math.min(Math.max(int(process.env.OTP_LENGTH, 6), 4), 8),
     ttlMinutes: int(process.env.OTP_TTL_MINUTES, 10),
@@ -93,8 +112,25 @@ if (!env.jwtSecret || env.jwtSecret.length < 32) {
   env.jwtSecret = env.jwtSecret || 'insecure-development-secret-change-me-now-0000000';
 }
 
+// The address messages actually come from. Gmail will rewrite anything else to
+// the authenticated account, so defaulting to EMAIL_USER keeps what is
+// configured and what is delivered the same thing.
+if (!env.email.from) env.email.from = env.email.user;
+
 if (isProduction && env.whatsapp.driver === 'mock') {
   console.warn('[env] WARNING: WHATSAPP_DRIVER=mock in production. No messages will be delivered.');
+}
+
+if (isProduction && env.email.driver === 'mock') {
+  console.warn('[env] WARNING: EMAIL_DRIVER=mock in production. No email will be delivered,');
+  console.warn('[env]          which includes every password-reset link.');
+}
+
+if (env.email.driver !== 'mock' && (!env.email.user || !env.email.password)) {
+  const message = `EMAIL_DRIVER=${env.email.driver} needs EMAIL_USER and EMAIL_PASSWORD.`;
+  if (isProduction) throw new Error(message);
+  console.warn(`[env] WARNING: ${message} Falling back to the mock driver.`);
+  env.email.driver = 'mock';
 }
 
 module.exports = env;

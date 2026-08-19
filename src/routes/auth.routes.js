@@ -160,15 +160,33 @@ router.post(
 
     auth.issueUserSession(res, user);
 
+    // The code goes out on both channels, and each can fail on its own, so the
+    // reply says which actually made it rather than claiming both did.
+    const reached = [
+      sent.whatsapp?.ok ? `WhatsApp (${maskPhone(user.whatsapp_number)})` : null,
+      sent.email?.ok ? `email (${user.email})` : null,
+    ].filter(Boolean);
+
     res.status(201).json({
       user: publicUser(user),
-      whatsapp: {
+      verification: {
         sent: sent.ok,
+        expires_in_minutes: env.otp.ttlMinutes,
+        channels: {
+          whatsapp: { attempted: Boolean(sent.whatsapp), sent: Boolean(sent.whatsapp?.ok) },
+          email: { attempted: Boolean(sent.email), sent: Boolean(sent.email?.ok) },
+        },
+        masked_number: maskPhone(user.whatsapp_number),
+        email: user.email,
+        message: reached.length
+          ? `We sent a verification code to your ${reached.join(' and ')}. Enter it to finish.`
+          : 'We could not send your code just now. Request a new one in a moment.',
+      },
+      // Kept so an older build of the front end does not break on this reply.
+      whatsapp: {
+        sent: Boolean(sent.whatsapp?.ok),
         masked_number: maskPhone(user.whatsapp_number),
         expires_in_minutes: env.otp.ttlMinutes,
-        message: sent.ok
-          ? `We sent a verification code to ${maskPhone(user.whatsapp_number)} on WhatsApp.`
-          : 'We could not reach WhatsApp just now. Request a new code in a moment.',
       },
     });
   }),
@@ -193,8 +211,10 @@ async function issueVerificationCode(user) {
     [user.id, user.whatsapp_number, sha256(code), env.otp.maxAttempts, addMinutes(env.otp.ttlMinutes)],
   );
 
-  if (env.whatsapp.driver === 'mock') {
-    console.log(`[whatsapp:mock] verification code for ${user.whatsapp_number} is ${code}`);
+  // One code, both channels. Printed once here so a developer running with mock
+  // drivers does not have to guess which log line to read it from.
+  if (env.whatsapp.driver === 'mock' || env.email.driver === 'mock') {
+    console.log(`[auth:mock] verification code for ${user.email} / ${user.whatsapp_number} is ${code}`);
   }
 
   return notifications.sendVerificationCode(user, code, env.otp.ttlMinutes);
@@ -210,13 +230,24 @@ router.post(
     }
     const user = await db.queryOne('SELECT * FROM users WHERE id = ?', [req.user.id]);
     const sent = await issueVerificationCode(user);
+
+    const reached = [
+      sent.whatsapp?.ok ? `WhatsApp (${maskPhone(user.whatsapp_number)})` : null,
+      sent.email?.ok ? `email (${user.email})` : null,
+    ].filter(Boolean);
+
     return res.json({
       sent: sent.ok,
       masked_number: maskPhone(user.whatsapp_number),
+      email: user.email,
+      channels: {
+        whatsapp: { attempted: Boolean(sent.whatsapp), sent: Boolean(sent.whatsapp?.ok) },
+        email: { attempted: Boolean(sent.email), sent: Boolean(sent.email?.ok) },
+      },
       expires_in_minutes: env.otp.ttlMinutes,
-      message: sent.ok
-        ? `New code sent to ${maskPhone(user.whatsapp_number)}.`
-        : 'WhatsApp did not accept the message. Check the number in your profile, then try again.',
+      message: reached.length
+        ? `New code sent to your ${reached.join(' and ')}.`
+        : 'Neither WhatsApp nor email accepted the message. Check your details, then try again.',
     });
   }),
 );
@@ -359,6 +390,10 @@ router.post('/logout', (req, res) => {
 // ---------------------------------------------------------------------------
 // Password reset
 // ---------------------------------------------------------------------------
+
+/** How long a reset link lives. Stated in the email, so both read from here. */
+const RESET_TTL_MINUTES = 30;
+
 router.post(
   '/forgot-password',
   authLimiter,
@@ -369,7 +404,7 @@ router.post(
     // Always the same reply, so this endpoint cannot enumerate accounts.
     const reply = {
       ok: true,
-      message: 'If that email is registered, a reset link is on its way by WhatsApp.',
+      message: 'If that email is registered, a reset link is on its way to it.',
     };
 
     if (!user || !user.is_active) return res.json(reply);
@@ -377,22 +412,21 @@ router.post(
     const token = randomToken(32);
     await db.query(
       `INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
-      [user.id, sha256(token), addMinutes(30)],
+      [user.id, sha256(token), addMinutes(RESET_TTL_MINUTES)],
     );
 
+    // Email only, never WhatsApp — see the note on sendPasswordReset. A mail
+    // failure is not observable here; it lands in the notifications log as
+    // FAILED for staff to find.
+    //
+    // Deliberately not awaited. An SMTP round trip to Gmail takes a second or
+    // two, so awaiting it would make a registered address measurably slower to
+    // answer than an unknown one — a timing oracle that gives back exactly the
+    // account enumeration the identical reply above exists to prevent.
     const link = `${env.appUrl}/reset-password.html?token=${token}`;
-    await notifications.dispatch({
-      userId: user.id,
-      recipient: user.whatsapp_number,
-      type: 'PASSWORD_RESET',
-      send: () =>
-        require('../services/whatsapp').sendRaw(
-          require('../services/whatsapp').textMessage(
-            user.whatsapp_number,
-            `${env.appName}: reset your password with this link. It expires in 30 minutes.\n${link}\n\nIf you did not ask for this, ignore this message.`,
-          ),
-        ),
-    });
+    notifications
+      .sendPasswordReset(user, link, RESET_TTL_MINUTES)
+      .catch((err) => console.error('[auth] password reset email failed:', err.message));
 
     if (!env.isProduction) console.log(`[auth] password reset link for ${user.email}: ${link}`);
 

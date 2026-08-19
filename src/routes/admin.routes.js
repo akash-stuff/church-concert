@@ -2,9 +2,11 @@
 
 const express = require('express');
 const db = require('../db');
+const env = require('../env');
 const bookingService = require('../services/booking');
 const notifications = require('../services/notifications');
 const feed = require('../services/console-feed');
+const emailService = require('../services/email');
 const { renderTicket } = require('../lib/ticket');
 const fs = require('fs/promises');
 const path = require('path');
@@ -1208,7 +1210,7 @@ router.post(
   asyncRoute(async (req, res) => {
     const concert = await resolveConcert(req);
     const rows = await db.query(
-      `SELECT u.id, u.full_name, u.whatsapp_number, b.booking_reference, s.seat_number
+      `SELECT u.id, u.full_name, u.email, u.whatsapp_number, b.booking_reference, s.seat_number
          FROM bookings b
          JOIN users u ON u.id = b.user_id
          JOIN seats s ON s.id = b.seat_id
@@ -1661,6 +1663,48 @@ router.get(
     if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
 
     res.type('html').send(renderTicket(party, holder));
+  }),
+);
+
+
+/**
+ * Check the mail credentials without sending anything.
+ *
+ * Worth its own endpoint: a wrong Gmail App Password is silent otherwise —
+ * registrations still succeed, reset links still get generated, and the only
+ * evidence is FAILED rows nobody is looking at. This turns that into a button.
+ */
+router.get(
+  '/email/test',
+  asyncRoute(async (req, res) => {
+    const result = await emailService.verifyConnection();
+    res.json({
+      ...result,
+      from: env.email.from || null,
+      user: env.email.user || null,
+    });
+  }),
+);
+
+/** Send a real test message to the signed-in administrator. */
+router.post(
+  '/email/test',
+  asyncRoute(async (req, res) => {
+    const result = await emailService.sendRaw({
+      to: req.admin.email,
+      subject: `${env.appName}: test message`,
+      text:
+        `This is a test from the ${env.appName} console, sent by ${req.admin.full_name}.
+
+` +
+        `If you are reading it, outgoing email is working.`,
+      html: `<p>This is a test from the <strong>${env.appName}</strong> console, sent by ${req.admin.full_name}.</p><p>If you are reading it, outgoing email is working.</p>`,
+    });
+
+    await audit(req, { action: 'EMAIL_TEST_SENT', entityType: 'SETTINGS', metadata: { to: req.admin.email } });
+
+    if (!result.ok) throw badRequest(result.error, 'EMAIL_TEST_FAILED');
+    res.json({ ok: true, message: `Test message sent to ${req.admin.email}.` });
   }),
 );
 

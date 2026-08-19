@@ -440,6 +440,8 @@ and user agent.
 | `GET` | `/admin/audit-logs` | Activity trail |
 | `GET` | `/admin/settings` | Platform settings |
 | `PATCH` | `/admin/settings` | `minimum_age`, `require_whatsapp_verification`, `allow_user_self_cancel`, `duplicate_check_fields` |
+| `GET` | `/admin/email/test` | Check the mail credentials without sending anything |
+| `POST` | `/admin/email/test` | Send a real test message to the signed-in admin |
 | `POST` | `/auth/admin/password` | Change your own password (`current_password`, `new_password`) |
 | `GET` | `/admin/bookings/:reference/ticket` | The printable confirmation for any party, as HTML |
 | `POST` | `/admin/concerts/:id/poster` | Upload a poster (`image` as a base64 data URI) |
@@ -456,6 +458,39 @@ and user agent.
 Every admin endpoint above is scoped by `?concert_id=`. Without it they fall
 back to the next upcoming concert, which is what the dashboard opens on. Creating
 sections, seats or manual bookings takes `concert_id` in the body.
+
+### Delivery channels
+
+Attendee messages go out on **email and WhatsApp together**, with one row per
+channel in `notifications` so each can succeed or fail independently. The
+exception is `PASSWORD_RESET`, which is email-only — see the README for why.
+
+`POST /auth/register` and `POST /auth/whatsapp/send` therefore report per
+channel:
+
+```json
+{
+  "verification": {
+    "sent": true,
+    "expires_in_minutes": 10,
+    "channels": {
+      "whatsapp": { "attempted": true, "sent": true },
+      "email":    { "attempted": true, "sent": false }
+    },
+    "masked_number": "+91 98••• ••210",
+    "email": "ruth@example.org",
+    "message": "We sent a verification code to your WhatsApp (+91 98••• ••210). Enter it to finish."
+  }
+}
+```
+
+`sent` at the top level is true if **either** channel arrived. The older
+`whatsapp` block is still present on the register reply so an out-of-date front
+end does not break, but new code should read `verification`.
+
+`GET /auth/forgot-password` replies identically whether or not the address is
+registered, so a mail failure is not observable to the caller — it lands in the
+notifications log as `FAILED` for staff to find.
 
 ### Analytics
 

@@ -403,7 +403,7 @@ async function cancelBooking({ bookingId, cancelledBy, reason = null, userId = n
     }
 
     const [userRows] = await conn.execute(
-      `SELECT id, full_name, whatsapp_number FROM users WHERE id = ?`,
+      `SELECT id, full_name, email, whatsapp_number FROM users WHERE id = ?`,
       [booking.user_id],
     );
     // The booking's own concert, not "the" concert: several run at once.
@@ -455,7 +455,7 @@ async function cancelBookingGroup({ reference, cancelledBy, reason = null, userI
     }
 
     const [userRows] = await conn.execute(
-      `SELECT id, full_name, whatsapp_number FROM users WHERE id = ?`,
+      `SELECT id, full_name, email, whatsapp_number FROM users WHERE id = ?`,
       [rows[0].user_id],
     );
     const concert = await getConcert(rows[0].concert_id, conn);
@@ -522,7 +522,7 @@ async function reassignSeat({ bookingId, newSeatId, adminId, note = null }) {
     }
 
     const [userRows] = await conn.execute(
-      `SELECT id, full_name, whatsapp_number FROM users WHERE id = ?`,
+      `SELECT id, full_name, email, whatsapp_number FROM users WHERE id = ?`,
       [booking.user_id],
     );
     const concert = await getConcert(booking.concert_id, conn);

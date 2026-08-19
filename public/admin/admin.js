@@ -2625,24 +2625,80 @@
       el('label', { for: id, text: label }),
     ]);
 
-  function renderEmailSettings() {
+  async function renderEmailSettings() {
     const box = $('[data-settings-body]');
     box.textContent = '';
+
+    const status = el('div', { class: 'u-flex' }, [
+      el('span', { class: 'chip chip--neutral', text: 'Checking…' }),
+    ]);
+
+    const testButton = el('button', {
+      class: 'btn btn--ghost btn--small',
+      type: 'button',
+      text: 'Send me a test email',
+    });
+    testButton.addEventListener('click', async () => {
+      busy(testButton, true, 'Sending…');
+      try {
+        const result = await api('/api/admin/email/test', { method: 'POST', body: {} });
+        UI.toastSuccess('Test sent', result.message);
+      } catch (error) {
+        UI.toastError('Test failed', error.message);
+      } finally {
+        busy(testButton, false);
+      }
+    });
+
     box.append(
       settingsCard(
         'Email',
-        'Which messages go out by email, and where password recovery points.',
+        'Outgoing mail, and what goes out on it.',
+        status,
         el('dl', { class: 'facts' }, [
-          fact('Password reset', 'Email — staff and attendees both recover by email link'),
-          fact('Booking confirmation', 'WhatsApp is primary; email is the fallback when no number is verified'),
-          fact('Ticket delivery', 'Attached to the confirmation, and downloadable from the attendee portal'),
+          fact('Verification code', 'Email and WhatsApp — the same code, sent to both'),
+          fact('Booking confirmation', 'Email and WhatsApp, each logged separately'),
+          fact('Password reset', 'Email only — a reset link is a bearer credential'),
+          fact('Ticket', 'Linked from the confirmation email, and downloadable from the portal'),
         ]),
+        el('div', { class: 'u-flex' }, [testButton]),
         el('p', {
           class: 'field__hint',
-          text: 'Sender address and transport are configured in the environment (see .env.example), not here, so a deployment cannot be reconfigured from a browser session.',
+          text:
+            'Transport and credentials come from the environment (EMAIL_DRIVER, EMAIL_USER, ' +
+            'EMAIL_PASSWORD — see .env.example), never from here, so a deployment cannot be ' +
+            'reconfigured from a browser session. Gmail needs a 16-character App Password with ' +
+            '2-Step Verification switched on; the account password will be rejected.',
         }),
       ),
     );
+
+    // Report the real connection state rather than asserting it works.
+    try {
+      const result = await api('/api/admin/email/test');
+      status.textContent = '';
+      if (result.driver === 'mock') {
+        status.append(
+          el('span', { class: 'chip chip--wait', text: 'Mock driver' }),
+          el('span', { class: 'text-sm muted', text: 'Nothing is actually delivered.' }),
+        );
+        testButton.disabled = true;
+      } else if (result.ok) {
+        status.append(
+          el('span', { class: 'chip chip--ok', text: `${result.driver} connected` }),
+          el('span', { class: 'text-sm muted', text: result.detail || '' }),
+        );
+      } else {
+        status.append(
+          el('span', { class: 'chip chip--off', text: 'Not connected' }),
+          el('span', { class: 'text-sm muted', text: result.error || '' }),
+        );
+      }
+    } catch (error) {
+      status.textContent = '';
+      status.append(el('span', { class: 'chip chip--off', text: 'Could not check' }),
+        el('span', { class: 'text-sm muted', text: error.message }));
+    }
   }
 
   function renderWhatsappSettings() {
@@ -2676,10 +2732,10 @@
         'WhatsApp',
         'Used for ticket confirmation and reminders — never for signing in.',
         el('dl', { class: 'facts' }, [
-          fact('Ticket confirmation', 'Sent on WhatsApp the moment a booking is confirmed'),
-          fact('Event reminder', 'Sent manually, from here'),
-          fact('Registration', 'Email and password — WhatsApp only verifies the number'),
-          fact('Password recovery', 'Email link, not WhatsApp'),
+          fact('Ticket confirmation', 'Sent on WhatsApp and by email the moment a booking is confirmed'),
+          fact('Event reminder', 'Sent manually, from here — goes to both channels'),
+          fact('Registration', 'Email and password. WhatsApp verifies the number it will message'),
+          fact('Password recovery', 'Email link only, never WhatsApp'),
         ]),
         remind,
       ),

@@ -3,8 +3,8 @@
 Free seat reservation for church concerts. Several concerts can run at the same
 time, each with its own seats, capacity and booking references. A verified adult
 may book as many seats as they need while they last — a party booked together
-shares one reference. Registration is 18+, verified over WhatsApp. No payment
-gateway: there is nothing to pay.
+shares one reference. Registration is 18+, verified by a code sent to both email
+and WhatsApp. No payment gateway: there is nothing to pay.
 
 Built on Node.js, Express, and your existing MySQL. The frontend is plain HTML,
 CSS, and JavaScript — no build step, no bundler, nothing to compile.
@@ -66,11 +66,60 @@ safe to re-run and will not touch anything already there.
 npm run migrate:status   # what has and has not been applied
 ```
 
+### Email (Gmail)
+
+Every attendee message goes out on **two channels**: email and WhatsApp. Email
+also carries the thing WhatsApp does not — password-reset links.
+
+Out of the box `EMAIL_DRIVER=mock` prints messages to the server console instead
+of sending them. For real delivery through Gmail:
+
+1. Switch on 2-Step Verification for the account:
+   <https://myaccount.google.com/signinoptions/two-step-verification>
+2. Create an App Password at <https://myaccount.google.com/apppasswords>
+   (choose **Mail**). You get 16 characters; spaces are optional.
+3. Put them in `.env`:
+
+```ini
+EMAIL_DRIVER=gmail
+EMAIL_USER=concerts@yourchurch.org
+EMAIL_PASSWORD=abcd efgh ijkl mnop
+EMAIL_FROM=concerts@yourchurch.org
+```
+
+**The account password will not work.** Google removed plain-password SMTP in
+2022; it is rejected with `535-5.7.8` however correct it looks. It must be an
+App Password, and App Passwords are only offered once 2-Step Verification is on.
+
+`EMAIL_FROM` has to be the authenticated account or a verified alias — Gmail
+silently rewrites anything else, so a "no-reply@" address you have not verified
+will not survive. Leave it blank and it defaults to `EMAIL_USER`.
+
+Check it without guessing: **Settings → Email** in the console shows the live
+connection state and has a *Send me a test email* button. It is worth using,
+because a wrong App Password is otherwise silent — registration still succeeds,
+reset links are still generated, and the only evidence is `FAILED` rows in the
+notifications log that nobody is looking at.
+
+**Sending limits.** A consumer `gmail.com` account is capped around 500
+recipients a day, Google Workspace around 2,000. The event reminder sends one
+message per attendee, so a large concert can hit that ceiling — send it in
+batches, or point `EMAIL_DRIVER=smtp` at a transactional provider.
+
+Any other SMTP server works too:
+
+```ini
+EMAIL_DRIVER=smtp
+SMTP_HOST=smtp.yourprovider.com
+SMTP_PORT=465
+SMTP_SECURE=true
+```
+
 ### WhatsApp
 
 Out of the box `WHATSAPP_DRIVER=mock` prints verification codes to the server
 console, so you can click through the whole flow without an API account. Watch
-the terminal for `[whatsapp:mock]`.
+the terminal for `[auth:mock]`.
 
 For real messages, set:
 
@@ -106,7 +155,7 @@ people who have messaged you recently.
 npm run seed:seats -- --section "Balcony" --prefix B --from 1 --to 24
 npm run check          # parse every JS file
 npm run test:reset     # return a scratch database to its seeded state
-npm test               # 101 end-to-end checks (needs a scratch database)
+npm test               # the end-to-end suite (needs a scratch database)
 npm run test:stress    # 30 people fight over one seat, then over one party's seats
 ```
 
@@ -130,6 +179,43 @@ restores the original one-seat-each behaviour.
 **Exports.** The Export tab produces CSV for users and for bookings. The bookings
 file is one row per seat, sorted by seat number, so it works as a door list
 without further editing.
+
+---
+
+## Who gets told what, and how
+
+| Message | Email | WhatsApp |
+| --- | :---: | :---: |
+| Verification code | ✓ | ✓ |
+| Welcome on registration | ✓ | ✓ |
+| Booking confirmation and ticket | ✓ | ✓ |
+| Booking cancellation | ✓ | ✓ |
+| Seat moved | ✓ | ✓ |
+| Event reminder | ✓ | ✓ |
+| **Password reset link** | ✓ | — |
+
+Every send writes **one row per channel** to `notifications`, because each
+channel fails on its own: a dead WhatsApp number should not make the email look
+undelivered in the console, or the other way round. A send counts as successful
+if *either* channel arrived, which is the question the caller is really asking —
+could we reach this person at all?
+
+**Password reset is email-only, on purpose.** A reset link is a bearer
+credential: whoever opens it takes the account. Email is the address the account
+is keyed on; a WhatsApp number can be recycled by a carrier or left signed in on
+a shared phone. Sending it to both would widen the blast radius for nothing.
+
+### What the verification code now proves
+
+The same code goes to both channels, so entering it proves the person controls
+**one of them** — not both, and the server cannot tell which. That matters
+because `users.whatsapp_verified` is what gates booking, and its original
+meaning was "we have proven we can reach this number".
+
+In practice the risk is small, because the ticket now goes to email as well —
+somebody who verified by email still receives everything they need. But if you
+want the stricter guarantee back, the change is to issue **two different codes**,
+one per channel, and set a separate flag depending on which is entered.
 
 ---
 
@@ -265,7 +351,8 @@ src/
   lib/          helpers, zod schemas, audit log and settings,
                 ticket.js (the printable confirmation, shared by two routes)
   middleware/   auth (sessions, RBAC), security (CSRF, rate limits, errors)
-  services/     booking (the transaction), whatsapp, notifications,
+  services/     booking (the transaction), whatsapp, email (Gmail SMTP),
+                notifications (fans out to both channels),
                 console-feed (staff-facing notifications)
   routes/       auth, app, admin, webhook
 public/
