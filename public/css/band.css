@@ -99,8 +99,11 @@ html[data-band='rose'] .bands-body {
 .band {
   display: grid;
   /* Fixed end blocks with the branding taking the slack, so both QR codes sit
-     the same distance from their own edge on every band. */
-  grid-template-columns: 46mm minmax(0, 1fr) 46mm;
+     the same distance from their own edge on every band.
+     58mm rather than 46: at 46 the name column was 17.5mm wide, which clipped
+     anything past a first name and an initial ("Akash vi…"). The middle still
+     has 104mm, which is more than the concert title needs. */
+  grid-template-columns: 58mm minmax(0, 1fr) 58mm;
   align-items: stretch;
   width: 220mm;
   height: 30mm;
@@ -116,7 +119,7 @@ html[data-band='rose'] .bands-body {
 
 .band__end {
   display: grid;
-  grid-template-columns: 20mm minmax(0, 1fr);
+  grid-template-columns: 19mm minmax(0, 1fr);
   align-items: center;
   gap: 2.5mm;
   padding: 2mm 3mm;
@@ -130,8 +133,8 @@ html[data-band='rose'] .bands-body {
 }
 
 .band__qr {
-  width: 20mm;
-  height: 20mm;
+  width: 19mm;
+  height: 19mm;
   padding: 1mm;
   background: #fff;
   border-radius: 1.5mm;
@@ -157,15 +160,36 @@ html[data-band='rose'] .bands-body {
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-/* One line, clipped. A long name must never push the reference off the strip:
-   the reference is what gets typed in when a code will not scan. */
+/* The whole name, wrapped, not a first name and two dots. A steward reads the
+   band to check they have the right person, and "Akash vi…" does not do that.
+
+   Two lines is the ceiling: the reference above it is what gets typed in when a
+   code will not scan, and it must never be pushed off the strip. Names longer
+   than two lines will fit, at the cost of a step down in size — set on
+   .band__name--long by the server when it counts the characters. */
 .band__name {
   font-size: 8.5pt;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.18;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.band__name--long {
+  font-size: 7pt;
+  line-height: 1.14;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.band__name--xlong {
+  font-size: 6pt;
+  line-height: 1.12;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
 }
 
 .band__middle {

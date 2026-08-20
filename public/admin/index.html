@@ -87,14 +87,9 @@
         <header class="topbar">
           <button class="topbar__menu" type="button" data-mobile-toggle aria-label="Open navigation" aria-expanded="false"></button>
 
-          <div class="topbar__heading">
-            <h1 class="topbar__title" data-topbar-title>Overview</h1>
-            <ol class="breadcrumb" data-breadcrumb>
-              <li><a href="/admin/">Console</a></li>
-              <li aria-current="page">Overview</li>
-            </ol>
-          </div>
-
+          <!-- No title or breadcrumb here. Every panel already opens with its
+               own <h1> in .page-head, so the bar was printing the same words a
+               few pixels above them. -->
           <div class="topbar__search">
             <span class="field__icon" data-icon="search" aria-hidden="true"></span>
             <label class="visually-hidden" for="global-search">Search bookings, attendees and concerts</label>
@@ -164,47 +159,48 @@
               </div>
             </div>
 
-            <div>
-              <div class="section-head">
-                <div>
-                  <h2>Upcoming concerts</h2>
-                  <p>The next evenings on the calendar, and how full each one is.</p>
-                </div>
-                <button class="btn btn--quiet btn--small" type="button" data-goto="concerts">View all</button>
-              </div>
-              <div class="concert-grid" data-upcoming></div>
-            </div>
+            <!-- Upcoming concerts and Recent bookings used to sit here. Both
+                 were a worse copy of a screen one click away — Concerts and
+                 Bookings — and pushed the quick actions below the fold. -->
 
-            <div class="surface">
-              <div class="surface__head">
-                <h2>Recent bookings</h2>
-                <button class="btn btn--quiet btn--small" type="button" data-goto="bookings">All bookings</button>
+            <div class="quick-deck">
+              <div class="quick-deck__intro">
+                <p class="quick-deck__eyebrow">Quick actions</p>
+                <h2>What would you like to do?</h2>
+                <p>The four jobs that bring staff to this console. Everything else is in the rail on the left.</p>
               </div>
-              <div class="data-table-wrap" data-recent-bookings></div>
-            </div>
-
-            <div class="surface surface--pad">
-              <div class="section-head"><h2>Quick actions</h2></div>
-              <div class="grid-3">
-                <button class="export-card" type="button" data-action="create-concert" data-icon-var="plus">
-                  <span class="export-card__icon" aria-hidden="true"></span>
-                  <h3>Create concert</h3>
-                  <p>Set the date, venue and capacity for a new evening.</p>
+              <div class="quick-deck__grid">
+                <button class="quick-card" type="button" data-action="create-concert" data-icon-var="plus">
+                  <span class="quick-card__icon export-card__icon" aria-hidden="true"></span>
+                  <span class="quick-card__text">
+                    <strong>Create concert</strong>
+                    <span>Set the date, venue and capacity for a new evening.</span>
+                  </span>
+                  <span class="quick-card__go" aria-hidden="true"></span>
                 </button>
-                <button class="export-card" type="button" data-goto="seats" data-icon-var="seat">
-                  <span class="export-card__icon" aria-hidden="true"></span>
-                  <h3>Manage seats</h3>
-                  <p>Lay out sections, add rows, block a seat or release one.</p>
+                <button class="quick-card" type="button" data-goto="seats" data-icon-var="seat">
+                  <span class="quick-card__icon export-card__icon" aria-hidden="true"></span>
+                  <span class="quick-card__text">
+                    <strong>Manage seats</strong>
+                    <span>Lay out sections, add rows, block a seat or release one.</span>
+                  </span>
+                  <span class="quick-card__go" aria-hidden="true"></span>
                 </button>
-                <button class="export-card" type="button" data-goto="bookings" data-icon-var="ticket">
-                  <span class="export-card__icon" aria-hidden="true"></span>
-                  <h3>View bookings</h3>
-                  <p>Search a reference, resend a ticket or cancel a party.</p>
+                <button class="quick-card" type="button" data-goto="bookings" data-icon-var="ticket">
+                  <span class="quick-card__icon export-card__icon" aria-hidden="true"></span>
+                  <span class="quick-card__text">
+                    <strong>View bookings</strong>
+                    <span>Search a reference, resend a ticket or cancel a party.</span>
+                  </span>
+                  <span class="quick-card__go" aria-hidden="true"></span>
                 </button>
-                <button class="export-card" type="button" data-goto="reports" data-icon-var="download">
-                  <span class="export-card__icon" aria-hidden="true"></span>
-                  <h3>Export report</h3>
-                  <p>Take bookings, attendees or occupancy away as a file.</p>
+                <button class="quick-card" type="button" data-goto="reports" data-icon-var="download">
+                  <span class="quick-card__icon export-card__icon" aria-hidden="true"></span>
+                  <span class="quick-card__text">
+                    <strong>Export report</strong>
+                    <span>Take bookings, attendees or occupancy away as a file.</span>
+                  </span>
+                  <span class="quick-card__go" aria-hidden="true"></span>
                 </button>
               </div>
             </div>
@@ -247,8 +243,8 @@
                 </select>
                 <span class="filter-bar__spacer"></span>
                 <div class="view-toggle" role="group" aria-label="View">
-                  <button type="button" data-view="cards" aria-pressed="true">Cards</button>
-                  <button type="button" data-view="table" aria-pressed="false">Table</button>
+                  <button type="button" data-view="table" aria-pressed="true">Table</button>
+                  <button type="button" data-view="cards" aria-pressed="false">Cards</button>
                 </div>
               </div>
               <div class="surface__body" data-concerts-view></div>
@@ -277,27 +273,43 @@
               </div>
             </div>
 
-            <div class="surface">
-              <div class="filter-bar">
-                <label class="visually-hidden" for="seat-concert">Concert</label>
-                <select id="seat-concert" data-seat-concert></select>
-                <label class="visually-hidden" for="seat-zone">Section</label>
-                <select id="seat-zone" data-seat-zone>
-                  <option value="all">All sections</option>
-                </select>
-                <div class="filter-bar__search">
-                  <span class="field__icon" data-icon="search" aria-hidden="true"></span>
-                  <label class="visually-hidden" for="seat-search">Find a seat</label>
-                  <input id="seat-search" type="search" placeholder="Find a seat, e.g. A12" data-seat-search />
-                </div>
+            <!-- One toolbar rather than a filter card whose bottom border ran
+                 under nothing, and the plan, its legend and its tools live in a
+                 single panel instead of three floating blocks. -->
+            <div class="seat-toolbar">
+              <label class="visually-hidden" for="seat-concert">Concert</label>
+              <select id="seat-concert" data-seat-concert></select>
+              <label class="visually-hidden" for="seat-zone">Section</label>
+              <select id="seat-zone" data-seat-zone>
+                <option value="all">All sections</option>
+              </select>
+              <div class="filter-bar__search">
+                <span class="field__icon" data-icon="search" aria-hidden="true"></span>
+                <label class="visually-hidden" for="seat-search">Find a seat</label>
+                <input id="seat-search" type="search" placeholder="Find a seat, e.g. A12" data-seat-search />
               </div>
+              <span class="filter-bar__spacer"></span>
+              <button class="btn btn--ghost btn--small" type="button" data-action="refresh-seats">
+                <span class="btn__icon" data-btn-icon="refresh" aria-hidden="true"></span>
+                Refresh
+              </button>
             </div>
+
+            <!-- Capacity, spelled out. Seats can be laid out past the number set
+                 on the concert, and until this was on screen there was nothing
+                 saying how much room was left. -->
+            <div class="capacity-bar" data-seat-capacity hidden></div>
 
             <div class="seat-stats" data-seat-stats></div>
 
             <div class="map-layout">
-              <div>
-                <div class="map-tools">
+              <div class="surface plan">
+                <div class="plan__head">
+                  <!-- No sub-heading: the page lede two inches above already
+                       says to click a seat. -->
+                  <div class="plan__title">
+                    <h2>Seating plan</h2>
+                  </div>
                   <div class="zoom" role="group" aria-label="Zoom">
                     <button class="btn btn--quiet btn--icon" type="button" data-zoom="out" aria-label="Zoom out">
                       <span class="btn__icon" data-btn-icon="zoom-out" aria-hidden="true"></span>
@@ -307,14 +319,8 @@
                       <span class="btn__icon" data-btn-icon="zoom-in" aria-hidden="true"></span>
                     </button>
                   </div>
-                  <button class="btn btn--ghost btn--small" type="button" data-zoom="reset">
+                  <button class="btn btn--quiet btn--icon" type="button" data-zoom="reset" aria-label="Reset view" title="Reset view">
                     <span class="btn__icon" data-btn-icon="target" aria-hidden="true"></span>
-                    Reset view
-                  </button>
-                  <span class="filter-bar__spacer"></span>
-                  <button class="btn btn--ghost btn--small" type="button" data-action="refresh-seats">
-                    <span class="btn__icon" data-btn-icon="refresh" aria-hidden="true"></span>
-                    Refresh
                   </button>
                 </div>
 
@@ -322,7 +328,9 @@
                   <div class="auditorium__viewport" data-viewport></div>
                 </div>
 
-                <div class="seat-legend" data-seat-legend></div>
+                <div class="plan__foot">
+                  <div class="seat-legend" data-seat-legend></div>
+                </div>
               </div>
 
               <aside class="seat-inspector surface" data-inspector aria-live="polite">
@@ -379,6 +387,18 @@
                   <option value="verified">WhatsApp verified</option>
                   <option value="unverified">Not verified</option>
                 </select>
+              </div>
+              <!-- Bulk actions on the ticked rows. Hidden until something is
+                   ticked, so the table does not carry a permanent empty bar. -->
+              <div class="bulk-bar" data-band-bar hidden>
+                <span class="bulk-bar__count" data-band-count>0 selected</span>
+                <button class="btn btn--primary btn--small" type="button" data-action="print-bands">
+                  <span class="btn__icon" data-btn-icon="ticket" aria-hidden="true"></span>
+                  Print hand bands
+                </button>
+                <button class="btn btn--quiet btn--small" type="button" data-action="clear-bands">
+                  Clear selection
+                </button>
               </div>
               <div class="data-table-wrap" data-bookings-table></div>
               <div class="surface__foot">
@@ -478,63 +498,67 @@
               </div>
             </div>
 
-            <div class="surface">
-              <div class="filter-bar">
-                <label class="visually-hidden" for="report-range">Date range</label>
-                <select id="report-range" data-report-range>
-                  <option value="30">Last 30 days</option>
-                  <option value="90" selected>Last 90 days</option>
-                  <option value="180">Last 6 months</option>
-                  <option value="365">Last 12 months</option>
-                </select>
-                <label class="visually-hidden" for="report-concert">Concert</label>
-                <select id="report-concert" data-report-concert>
-                  <option value="">All concerts</option>
-                </select>
-                <span class="filter-bar__spacer"></span>
-                <button class="btn btn--ghost btn--small" type="button" data-action="refresh-reports">
-                  <span class="btn__icon" data-btn-icon="refresh" aria-hidden="true"></span>
-                  Refresh
-                </button>
-              </div>
-              <div class="surface__body">
-                <div class="kpi-grid" data-report-kpis></div>
-              </div>
+            <!-- One page rather than four stacked full-width blocks. The
+                 filters are a bar rather than a card, the charts sit beside each
+                 other, and the export cards share a row with the per-concert
+                 ranking instead of starting a fifth screenful. -->
+            <div class="report-bar">
+              <label class="visually-hidden" for="report-range">Date range</label>
+              <select id="report-range" data-report-range>
+                <option value="30">Last 30 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="180">Last 6 months</option>
+                <option value="365">Last 12 months</option>
+              </select>
+              <label class="visually-hidden" for="report-concert">Concert</label>
+              <select id="report-concert" data-report-concert>
+                <option value="">All concerts</option>
+              </select>
+              <span class="filter-bar__spacer"></span>
+              <button class="btn btn--ghost btn--small" type="button" data-action="refresh-reports">
+                <span class="btn__icon" data-btn-icon="refresh" aria-hidden="true"></span>
+                Refresh
+              </button>
             </div>
 
-            <div class="grid-2">
-              <div class="surface">
-                <div class="surface__head"><h2>Booking trend</h2></div>
-                <div class="surface__body">
+            <div class="kpi-grid kpi-grid--tint" data-report-kpis></div>
+
+            <div class="report-grid">
+              <div class="surface surface--accent-trend">
+                <div class="surface__head">
+                  <div>
+                    <h2>Booking trend</h2>
+                    <p class="surface__head-sub">Seats reserved against cancellations, day by day</p>
+                  </div>
                   <ul class="chart-legend">
                     <li><i></i>Seats reserved</li>
                     <li><i data-series="accent"></i>Cancellations</li>
                   </ul>
-                  <div data-report-trend></div>
                 </div>
+                <div class="surface__body" data-report-trend></div>
               </div>
-              <div class="surface">
+              <div class="surface surface--accent-occupancy">
                 <div class="surface__head"><h2>Seat occupancy</h2></div>
                 <div class="surface__body" data-report-occupancy></div>
               </div>
-            </div>
-
-            <div class="surface">
-              <div class="surface__head">
-                <h2>Concert performance</h2>
-                <p class="surface__head-sub">Occupancy against capacity, per concert</p>
-              </div>
-              <div class="surface__body" data-report-performance></div>
-            </div>
-
-            <div>
-              <div class="section-head">
-                <div>
-                  <h2>Export</h2>
-                  <p>Both formats are generated by the server from the same query, so a report&rsquo;s CSV and its PDF always match. PDF opens a print-ready page &mdash; choose &ldquo;Save as PDF&rdquo;.</p>
+              <div class="surface surface--accent-export">
+                <div class="surface__head">
+                  <div>
+                    <h2>Export</h2>
+                    <p class="surface__head-sub">CSV and PDF come from the same query, so they always match</p>
+                  </div>
                 </div>
+                <div class="surface__body" data-exports></div>
               </div>
-              <div class="export-grid" data-exports></div>
+              <div class="surface surface--accent-perf">
+                <div class="surface__head">
+                  <div>
+                    <h2>Concert performance</h2>
+                    <p class="surface__head-sub">Occupancy against capacity, per concert</p>
+                  </div>
+                </div>
+                <div class="surface__body report-scroll" data-report-performance></div>
+              </div>
             </div>
           </section>
 

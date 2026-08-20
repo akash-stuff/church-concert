@@ -51,6 +51,9 @@ const STAFF_ALLOWED = [
   /^\/me$/,
   /^\/checkin$/,
   /^\/band-colours$/,
+  // The bulk sheet as well as the per-booking one: a steward printing bands for
+  // a queue of parties is the same job as printing them one at a time.
+  /^\/bookings\/band$/,
   /^\/bookings\/[^/]+\/(ticket|band)$/,
 ];
 
@@ -78,6 +81,38 @@ router.use((req, res, next) => {
 const resolveConcert = (req) => {
   const raw = req.query.concert_id ?? req.body?.concert_id;
   return raw ? bookingService.getConcert(Number(raw)) : bookingService.getDefaultConcert();
+};
+
+/**
+ * How much of a concert's capacity its seat plan has already used.
+ *
+ * `max_capacity` is the number staff type into the concert form, and until this
+ * existed nothing compared it with the plan: a 100-seat concert would happily
+ * accept a 400-seat layout, and the only sign was an occupancy figure above
+ * 100% on a different screen. Both seat-creation routes check it, so the rule
+ * holds however the request arrives.
+ *
+ * A capacity of 0 means "not set" and is not enforced.
+ */
+const seatBudget = async (concert) => {
+  const row = await db.queryOne('SELECT COUNT(*) AS count FROM seats WHERE concert_id = ?', [
+    concert.id,
+  ]);
+  const capacity = Number(concert.max_capacity) || 0;
+  const laidOut = Number(row?.count) || 0;
+  return { capacity, laidOut, remaining: capacity ? capacity - laidOut : Infinity };
+};
+
+/** Refuse a run that would take the plan past the concert's capacity. */
+const assertCapacity = async (concert, wanted) => {
+  const { capacity, laidOut, remaining } = await seatBudget(concert);
+  if (!capacity || wanted <= remaining) return;
+  throw badRequest(
+    remaining <= 0
+      ? `"${concert.name}" is laid out to its full capacity of ${capacity} seats. Raise the capacity on the concert to add more.`
+      : `That run is ${wanted} seats, and only ${remaining} of the ${capacity}-seat capacity is left (${laidOut} already laid out). Reduce the range, or raise the capacity on the concert.`,
+    'CAPACITY_EXCEEDED',
+  );
 };
 
 /**
@@ -499,11 +534,25 @@ router.get(
   '/seats',
   asyncRoute(async (req, res) => {
     const concert = await resolveConcert(req);
-    const [sections, stats] = await Promise.all([
+    const [sections, stats, budget] = await Promise.all([
       bookingService.getSeatMap(concert.id, { includeOccupant: true }),
       bookingService.getStats(concert.id),
+      seatBudget(concert),
     ]);
-    res.json({ concert_id: concert.id, sections, stats });
+    // The budget travels with the map so the console's capacity meter reads the
+    // same numbers the seat routes enforce, rather than a max_capacity cached
+    // from an earlier analytics call.
+    res.json({
+      concert_id: concert.id,
+      concert: { id: concert.id, name: concert.name, max_capacity: concert.max_capacity },
+      capacity: {
+        total: budget.capacity,
+        laid_out: budget.laidOut,
+        remaining: Number.isFinite(budget.remaining) ? budget.remaining : null,
+      },
+      sections,
+      stats,
+    });
   }),
 );
 
@@ -576,6 +625,7 @@ router.post(
   asyncRoute(async (req, res) => {
     const data = parse(schemas.seatSchema, req.body);
     const concert = await resolveConcert(req);
+    await assertCapacity(concert, 1);
     try {
       const result = await db.query(
         `INSERT INTO seats (concert_id, section_id, seat_number, row_label, display_order, status, note)
@@ -613,6 +663,10 @@ router.post(
     if (data.to - data.from > 499) throw badRequest('Create at most 500 seats at a time.');
 
     const concert = await resolveConcert(req);
+    // Checked before anything is written, and against the whole requested run:
+    // the duplicate skip below can only ever reduce the count, so a run that
+    // fits the budget here cannot overshoot it later.
+    await assertCapacity(concert, data.to - data.from + 1);
     const pad = data.pad ?? 2;
     const rowLabel = data.row_label ?? (data.prefix || null);
 
@@ -1908,7 +1962,7 @@ router.get(
 );
 
 /**
- * Printable hand bands for a booking — the wristbands a steward puts on.
+ * Printable hand bands — the wristbands a steward puts on.
  *
  * Admin-only, and reachable from the check-in screen rather than from an
  * attendee's dashboard. That placement is the point: a band says this person has
@@ -1916,50 +1970,118 @@ router.get(
  * ticket. An attendee who could print their own band at home would make the
  * scan pointless.
  *
- * One band per seat by default, because a band goes on one wrist. `?seat=`
- * narrows it to a single seat, for the guest who turns up an hour after the rest
- * of their party, or whose band tore. `?colour=` picks the strip colour; the
- * palette lives in lib/hand-band.js and defaults to violet.
+ * One band per seat, because a band goes on one wrist. `?colour=` picks the
+ * strip colour; the palette lives in lib/hand-band.js and defaults to violet.
+ *
+ * ---
+ *
+ * One booking's worth of bands, ready to render. `seatFilter` narrows to a
+ * single seat, for the guest who turns up an hour after the rest of their party,
+ * or whose band tore.
+ */
+async function bandSheet(reference, seatFilter = null) {
+  const { party, holder } = await printable(reference);
+
+  const wanted = seatFilter ? String(seatFilter).trim().toUpperCase() : null;
+  const seats = wanted
+    ? party.seats.filter((row) => String(row.seat_number).toUpperCase() === wanted)
+    : party.seats;
+
+  if (!seats.length) {
+    throw notFound(
+      wanted ? `No seat ${wanted} on ${reference}.` : `${reference} holds no seats.`,
+      'NO_SEATS',
+    );
+  }
+
+  // guest_name is populated for every live row — migration 006 backfilled the
+  // account holder onto anything booked before guest details existed — but the
+  // fallback stays so a band can never print blank.
+  const guests = seats.map((seat) => ({
+    name: seat.guest_name || holder.full_name,
+    seat_number: seat.seat_number,
+    section_name: seat.section_name,
+  }));
+
+  return { party, guests };
+}
+
+/** At most this many bookings on one sheet, so a stray query cannot ask the
+ *  server to render a thousand QR codes into a single response. */
+const MAX_BAND_BOOKINGS = 40;
+
+/**
+ * Bands for several bookings on one sheet.
+ *
+ * Declared before the `:reference` route so "band" is not read as a reference.
+ * A door checks in a queue of parties and wants one trip to the printer; each
+ * band still carries its own booking's reference and QR, so the sheet is a set
+ * of individually valid bands that happen to have been printed together.
  */
 router.get(
-  '/bookings/:reference/band',
+  '/bookings/band',
   asyncRoute(async (req, res) => {
-    const { party, holder } = await printable(String(req.params.reference).trim());
+    const raw = String(req.query.refs || req.query.references || '').trim();
+    const references = [...new Set(raw.split(',').map((ref) => ref.trim()).filter(Boolean))];
 
-    const wanted = req.query.seat ? String(req.query.seat).trim().toUpperCase() : null;
-    const seats = wanted
-      ? party.seats.filter((row) => String(row.seat_number).toUpperCase() === wanted)
-      : party.seats;
-
-    if (!seats.length) {
-      throw notFound(
-        wanted ? `No seat ${wanted} on that booking.` : 'That booking holds no seats.',
-        'NO_SEATS',
+    if (!references.length) {
+      throw badRequest('Name at least one booking, as ?refs=REF1,REF2.', 'NO_REFERENCES');
+    }
+    if (references.length > MAX_BAND_BOOKINGS) {
+      throw badRequest(
+        `That is ${references.length} bookings. Print at most ${MAX_BAND_BOOKINGS} sheets at a time.`,
+        'TOO_MANY_REFERENCES',
       );
     }
 
-    // guest_name is populated for every live row — migration 006 backfilled the
-    // account holder onto anything booked before guest details existed — but the
-    // fallback stays so a band can never print blank.
-    const guests = seats.map((seat) => ({
-      name: seat.guest_name || holder.full_name,
-      seat_number: seat.seat_number,
-      section_name: seat.section_name,
-    }));
+    // Sequential rather than Promise.all: the first bad reference should be the
+    // error the steward sees, not whichever query happened to reject first.
+    const sheets = [];
+    for (const reference of references) {
+      // eslint-disable-next-line no-await-in-loop
+      sheets.push(await bandSheet(reference));
+    }
 
     await audit(req, {
       action: 'HAND_BANDS_PRINTED',
       entityType: 'BOOKING',
-      entityId: party.seats[0]?.booking_id ?? null,
+      entityId: sheets[0].party.seats[0]?.booking_id ?? null,
       metadata: {
-        reference: party.booking_reference,
-        bands: guests.length,
+        references,
+        bookings: sheets.length,
+        bands: sheets.reduce((sum, sheet) => sum + sheet.guests.length, 0),
         colour: req.query.colour || handBand.DEFAULT_COLOUR,
       },
     });
 
     res.type('html').send(
-      await handBand.renderHandBands(party, guests, {
+      await handBand.renderHandBands(sheets, {
+        autoPrint: req.query.print === '1',
+        colour: String(req.query.colour || handBand.DEFAULT_COLOUR),
+      }),
+    );
+  }),
+);
+
+router.get(
+  '/bookings/:reference/band',
+  asyncRoute(async (req, res) => {
+    const reference = String(req.params.reference).trim();
+    const sheet = await bandSheet(reference, req.query.seat || null);
+
+    await audit(req, {
+      action: 'HAND_BANDS_PRINTED',
+      entityType: 'BOOKING',
+      entityId: sheet.party.seats[0]?.booking_id ?? null,
+      metadata: {
+        reference: sheet.party.booking_reference,
+        bands: sheet.guests.length,
+        colour: req.query.colour || handBand.DEFAULT_COLOUR,
+      },
+    });
+
+    res.type('html').send(
+      await handBand.renderHandBands([sheet], {
         autoPrint: req.query.print === '1',
         colour: String(req.query.colour || handBand.DEFAULT_COLOUR),
       }),

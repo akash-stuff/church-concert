@@ -3169,6 +3169,9 @@ input[type='search'] {
   display: flex;
   flex-direction: column;
 }
+/* Plain white, and nothing in it but the search and the account tools. The
+   title and breadcrumb that used to sit on the left repeated the panel heading
+   directly underneath them, so they were removed rather than restyled. */
 .topbar {
   position: sticky;
   top: 0;
@@ -3178,60 +3181,16 @@ input[type='search'] {
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-6);
-  background: rgba(255, 255, 255, 0.86);
-  -webkit-backdrop-filter: saturate(180%) blur(14px);
-  backdrop-filter: saturate(180%) blur(14px);
+  background: #fff;
   border-bottom: 1px solid var(--line);
-}
-.topbar__heading {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.topbar__title {
-  font-family: var(--display);
-  font-size: 1.0625rem;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.25;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 2px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-.breadcrumb li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.breadcrumb li + li::before {
-  content: '/';
-  color: var(--line-strong);
-}
-.breadcrumb a {
-  color: var(--muted);
-  text-decoration: none;
-}
-.breadcrumb a:hover {
-  color: var(--accent-strong);
-  text-decoration: underline;
-}
-.breadcrumb [aria-current='page'] {
-  color: var(--ink);
-  font-weight: 600;
 }
 
 .topbar__search {
   position: relative;
-  flex: 0 1 20rem;
+  flex: 1 1 auto;
+  max-width: 26rem;
   min-width: 0;
+  margin-right: auto;
 }
 .topbar__search input {
   height: 2.375rem;
@@ -4106,17 +4065,10 @@ input[type='search'] {
 }
 
 @media (max-width: 48rem) {
+  /* The bar carries nothing else now, so the search stays rather than being
+     hidden behind a toggle that was never wired up. */
   .topbar__search {
-    display: none;
-  }
-  .topbar__search--open {
-    display: block;
-    position: absolute;
-    left: var(--space-4);
-    right: var(--space-4);
-    top: 100%;
-    background: var(--surface);
-    padding: var(--space-3) 0;
+    max-width: none;
   }
   .page-head h1 {
     font-size: 1.375rem;
@@ -4706,13 +4658,6 @@ input[type='search'] {
   right: -4px;
 }
 
-.map-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-4);
-}
 .zoom {
   display: inline-flex;
   align-items: center;
@@ -5872,4 +5817,580 @@ input[type='search'] {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ===========================================================================
+   Corrections pass
+   =========================================================================== */
+
+/* --- Legal / long-form copy ---------------------------------------------- */
+
+.legal section + section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--line);
+}
+.legal h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 1rem;
+}
+.legal p,
+.legal li {
+  margin: 0;
+  color: var(--body-ink);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+.legal ul {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* --- Toolbar control alignment ------------------------------------------
+   The base input padding is 0.75rem top and bottom. Against a fixed 2.375rem
+   height that totals more than the box, so the glyphs were clipped along the
+   bottom — visible on every filter bar and on the console search. Height and
+   padding cannot both be authoritative: the height wins, and the text is
+   centred inside it by line-height instead. */
+
+.filter-bar select,
+.filter-bar input,
+.topbar__search input {
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 2.25rem;
+}
+/* Same reason as the seat toolbar: a concert name is long enough to break the
+   row on its own. */
+.filter-bar select {
+  max-width: 17rem;
+}
+/* A search box in a filter bar carries an icon, absolutely positioned by
+   .field__icon, so the text has to start clear of it. Without a --inline
+   wrapper the icon also needs centring by hand. */
+.filter-bar__search .field__icon {
+  top: 50%;
+}
+.filter-bar__search input {
+  width: 100%;
+  padding-left: 2.5rem;
+}
+/* date and time inputs render their own internal spin/picker widgets, which
+   ignore line-height; centring the flex box they sit in is what works. */
+.filter-bar input[type='date'],
+.filter-bar input[type='time'] {
+  line-height: normal;
+  align-items: center;
+}
+
+/* --- Danger buttons -----------------------------------------------------
+   The gradient fill lands on top of the earlier rule's red text, so "Release
+   seat" printed red-on-red. Solid, with white type on it. */
+
+.btn--danger {
+  background: linear-gradient(135deg, #d33b4f, var(--danger));
+  border-color: transparent;
+  color: #fff;
+}
+.btn--danger:hover:not(:disabled),
+.btn--danger:focus-visible {
+  background: linear-gradient(135deg, var(--danger), #8f1c2e);
+  border-color: transparent;
+  color: #fff;
+}
+.btn--danger .btn__icon {
+  color: #fff;
+}
+
+/* --- Overview quick actions ---------------------------------------------
+   Deliberately the one navy panel in the body of the console. The overview is
+   otherwise a field of white cards, and these four are the only things on the
+   page you press to go somewhere rather than to read a number. */
+
+.quick-deck {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  align-items: start;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(38rem 20rem at 88% -30%, rgba(224, 172, 76, 0.22), transparent 65%),
+    var(--gradient-brand);
+  box-shadow: var(--shadow);
+}
+@media (max-width: 68rem) {
+  .quick-deck {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+}
+
+.quick-deck__intro {
+  color: #fff;
+}
+.quick-deck__eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-light);
+}
+.quick-deck__intro h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.375rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.quick-deck__intro p {
+  margin: var(--space-3) 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.quick-deck__grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.quick-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--t-fast) ease,
+    border-color var(--t-fast) ease,
+    transform var(--t) var(--ease-out);
+}
+.quick-card:hover,
+.quick-card:focus-visible {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: var(--accent-light);
+  transform: translateY(-2px);
+}
+.quick-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* Overrides the pale wash the export-card icon carries on white surfaces. */
+.quick-card__icon.export-card__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  background: rgba(224, 172, 76, 0.18);
+  color: var(--accent-light);
+}
+
+.quick-card__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.quick-card__text strong {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.quick-card__text span {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.quick-card__go {
+  width: 1rem;
+  height: 1rem;
+  background-color: rgba(255, 255, 255, 0.5);
+  -webkit-mask: url('/assets/icons/chevron.svg') center / contain no-repeat;
+  mask: url('/assets/icons/chevron.svg') center / contain no-repeat;
+  transform: rotate(-90deg);
+  transition: background-color var(--t-fast) ease, transform var(--t) var(--ease-out);
+}
+.quick-card:hover .quick-card__go {
+  background-color: var(--accent-light);
+  transform: rotate(-90deg) translateY(-3px);
+}
+
+/* --- Reports & Export: one page -----------------------------------------
+   The page used to be four full-width blocks stacked, which meant scrolling
+   past a screenful of chart to reach the export buttons. Filters are a bare
+   toolbar, the KPIs are tinted so the row reads at a glance, and the four
+   panels below share a two-by-two grid. */
+
+.report-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.report-bar select {
+  height: 2.375rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 2.25rem;
+  font-size: 0.8125rem;
+  width: auto;
+  min-width: 9rem;
+}
+
+.report-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  align-items: start;
+}
+@media (max-width: 68rem) {
+  .report-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Tighter than the console default — this grid carries four panels rather than
+   one, so the padding is the difference between one screen and two. */
+.report-grid .surface__head {
+  padding: var(--space-3) var(--space-4);
+}
+.report-grid .surface__body {
+  padding: var(--space-4);
+}
+.report-grid .chart-legend {
+  margin: 0;
+}
+
+/* A hairline of colour along the top of each panel, so the four are told apart
+   by more than their headings. */
+.surface--accent-trend,
+.surface--accent-occupancy,
+.surface--accent-perf,
+.surface--accent-export {
+  border-top: 3px solid var(--panel-accent, var(--line-strong));
+}
+.surface--accent-trend {
+  --panel-accent: var(--brand-light);
+}
+.surface--accent-occupancy {
+  --panel-accent: var(--ok);
+}
+.surface--accent-perf {
+  --panel-accent: var(--accent);
+}
+.surface--accent-export {
+  --panel-accent: var(--info);
+}
+
+/* A long concert list scrolls inside its own panel rather than stretching the
+   page — the point of this pass was that the page stopped being one page. */
+.report-scroll {
+  max-height: 17rem;
+  overflow-y: auto;
+}
+
+/* Tinted KPI row. Each card takes a wash from its position in the row so the
+   five read as a set rather than five identical white boxes. */
+/* Five cards, one row, on anything from a laptop up — the point of this pass
+   was that the report stopped being four screens. */
+.kpi-grid--tint {
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+.kpi-grid--tint .kpi {
+  padding: var(--space-4);
+}
+.kpi-grid--tint .kpi__value {
+  font-size: 1.5rem;
+}
+.kpi-grid--tint .kpi__meta {
+  font-size: 0.6875rem;
+}
+.kpi-grid--tint .kpi:nth-child(1) {
+  background: linear-gradient(160deg, var(--info-wash), var(--surface) 70%);
+}
+.kpi-grid--tint .kpi:nth-child(2) {
+  background: linear-gradient(160deg, var(--ok-wash), var(--surface) 70%);
+}
+.kpi-grid--tint .kpi:nth-child(3) {
+  background: linear-gradient(160deg, var(--accent-wash), var(--surface) 70%);
+}
+.kpi-grid--tint .kpi:nth-child(4) {
+  background: linear-gradient(160deg, var(--danger-wash), var(--surface) 70%);
+}
+.kpi-grid--tint .kpi:nth-child(5) {
+  background: linear-gradient(160deg, var(--warn-wash), var(--surface) 70%);
+}
+
+/* Export rows, in place of the export cards this page used to wrap onto two
+   lines. .export-card and .export-grid are still used by the overview. */
+.export-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.export-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--t-fast) ease, background-color var(--t-fast) ease;
+}
+.export-row:hover {
+  border-color: var(--accent-line);
+  background: #fff;
+}
+.export-row__icon {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--wash);
+  color: var(--brand-light);
+}
+.export-row__icon::before {
+  content: '';
+  width: 1.05rem;
+  height: 1.05rem;
+  background-color: currentColor;
+  -webkit-mask: var(--export-icon, url('/assets/icons/note.svg')) center / contain no-repeat;
+  mask: var(--export-icon, url('/assets/icons/note.svg')) center / contain no-repeat;
+}
+.export-row__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.export-row__text strong {
+  font-size: 0.875rem;
+}
+.export-row__text span {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--muted);
+  /* This panel shares a row with the concert ranking, so it is narrow. Two
+     lines of description, not four. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.export-row__formats {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* --- Seat management ----------------------------------------------------
+   The plan, its tools and its legend are one panel. They used to be three
+   unconnected blocks with a filter card above them whose bottom border ran
+   under empty space. */
+
+.seat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.seat-toolbar select,
+.seat-toolbar input {
+  height: 2.375rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 2.25rem;
+  font-size: 0.8125rem;
+  width: auto;
+  min-width: 9rem;
+  /* A select sized to its content: "Christmas evening — Thursday, 24 December
+     2026" is 405px of it, which pushed Refresh onto a second row. The browser
+     truncates the option text, and the full name is one click away. */
+  max-width: 17rem;
+}
+.seat-toolbar .filter-bar__search {
+  flex: 1 1 14rem;
+  min-width: 11rem;
+}
+.seat-toolbar .filter-bar__search .field__icon {
+  top: 50%;
+}
+.seat-toolbar .filter-bar__search input {
+  width: 100%;
+  padding-left: 2.5rem;
+}
+
+/* Capacity against what is laid out. Turns amber as the plan approaches the
+   number set on the concert and red once it is past it, which is the state the
+   seat form now refuses to add to. */
+.capacity-bar {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--capacity-tone, var(--ok));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.capacity-bar__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.capacity-bar__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.capacity-bar__value {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.capacity-bar__value strong {
+  color: var(--capacity-tone, var(--ok));
+}
+.capacity-bar__rail {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+  overflow: hidden;
+}
+.capacity-bar__rail i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--capacity-tone, var(--ok));
+  transition: width var(--t-slow) var(--ease-out);
+}
+.capacity-bar__note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.capacity-bar[data-tone='warn'] {
+  --capacity-tone: var(--warn);
+}
+.capacity-bar[data-tone='over'] {
+  --capacity-tone: var(--danger);
+}
+
+.seat-stats {
+  margin-bottom: 0;
+}
+/* A tinted card per status, so the row is readable without reading it: the
+   swatch used to be a 0.55rem square beside grey text. */
+.seat-stat {
+  position: relative;
+  overflow: hidden;
+  border-left: 3px solid var(--seat-swatch, var(--line-strong));
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--seat-swatch, #fff) 9%, #fff), var(--surface) 72%);
+}
+.seat-stat__value {
+  color: var(--ink);
+}
+
+.plan {
+  overflow: hidden;
+}
+.plan__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.plan__title {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.plan__title h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+.plan .auditorium {
+  border: none;
+  border-radius: 0;
+}
+.plan__foot {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.plan__foot .seat-legend {
+  margin: 0;
+}
+/* The legend now sits in the plan's footer, which supplies its own frame. */
+.plan__foot .seat-legend {
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+/* A hint that has turned into a complaint — used by the seat-run counter when
+   the range asks for more seats than the concert has capacity for. */
+.field__hint[data-tone='error'] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* --- Bulk selection ------------------------------------------------------
+   Bookings can be ticked and printed as one sheet of hand bands. The bar only
+   exists while something is ticked. */
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-wash);
+}
+.bulk-bar__count {
+  flex: 1 1 auto;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table__pick {
+  width: 2.75rem;
+  padding-right: 0;
+}
+.data-table__pick input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }

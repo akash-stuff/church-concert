@@ -64,42 +64,73 @@ const colourOptions = () =>
 /**
  * One end-block of a band: QR, reference, name. Rendered twice per strip,
  * mirrored, so the details are readable whichever way the wrist is turned.
+ *
+ * `reference` is passed in rather than read off the party, because a sheet may
+ * now hold bands from several bookings at once.
+ *
+ * The name column is 30.5mm wide, which is about 19 characters a line at the
+ * default 8.5pt — so two lines hold roughly 34. Past that the block steps down
+ * a size rather than losing the tail of the name, which is the whole point of
+ * printing it. Measured, not guessed: 8.5pt/2 lines, 7pt/3 lines and 6pt/4
+ * lines are the three rungs, and the longest of them takes 90 characters.
  */
-function endBlock(qrSvg, party, guestName, { flip = false } = {}) {
+const NAME_TWO_LINES = 34;
+const NAME_THREE_LINES = 66;
+
+function endBlock(qrSvg, reference, guestName, { flip = false } = {}) {
+  const name = String(guestName || '');
+  const long =
+    name.length > NAME_THREE_LINES
+      ? ' band__name--xlong'
+      : name.length > NAME_TWO_LINES
+        ? ' band__name--long'
+        : '';
   return `
       <div class="band__end${flip ? ' band__end--flip' : ''}">
         <div class="band__qr">${qrSvg}</div>
         <div class="band__who">
-          <span class="band__ref">${esc(party.booking_reference)}</span>
-          <span class="band__name">${esc(guestName)}</span>
+          <span class="band__ref">${esc(reference)}</span>
+          <span class="band__name${long}">${esc(name)}</span>
         </div>
       </div>`;
 }
 
 /**
- * `party` is the shape bookingService.getUserBookings returns. `guests` is one
- * entry per band to print: `{ name, seat_number, section_name }`.
+ * One sheet of bands, for one or more bookings.
  *
- * A band per guest rather than per booking, because a band goes on one wrist.
+ * `sheets` is `[{ party, guests }]` — `party` in the shape
+ * bookingService.getUserBookings returns, `guests` one entry per band to print:
+ * `{ name, seat_number, section_name }`. A band per guest rather than per
+ * booking, because a band goes on one wrist.
+ *
+ * Several bookings at once because that is how a door actually runs: a steward
+ * checks in a queue of six parties and wants one trip to the printer, not six.
+ * Each band still carries its own booking's QR and reference, so a sheet mixing
+ * parties is still a set of individually valid bands.
  */
-async function renderHandBands(party, guests, { autoPrint = false, colour = DEFAULT_COLOUR } = {}) {
+async function renderHandBands(sheets, { autoPrint = false, colour = DEFAULT_COLOUR } = {}) {
   const theme = COLOURS[colour] || COLOURS[DEFAULT_COLOUR];
   const key = COLOURS[colour] ? colour : DEFAULT_COLOUR;
 
-  // The QR is generated in the band's own dark ink so it prints at full
-  // contrast against the strip rather than in the site's navy.
-  const qrSvg = (await qr.ticketSvg(party.booking_reference, { dark: theme.qrDark })) || '';
-  const checkIn = qr.checkInUrl(party.booking_reference);
+  const groups = [];
+  for (const { party, guests } of sheets) {
+    // The QR is generated in the band's own dark ink so it prints at full
+    // contrast against the strip rather than in the site's navy. One per
+    // booking: the code encodes the reference.
+    // eslint-disable-next-line no-await-in-loop
+    const qrSvg = (await qr.ticketSvg(party.booking_reference, { dark: theme.qrDark })) || '';
+    const when = `${whatsapp.formatDate(party.concert.event_date)} · ${whatsapp.formatTime(
+      party.concert.start_time,
+    )}`;
+    groups.push({ party, guests, qrSvg, when });
+  }
 
-  const when = `${whatsapp.formatDate(party.concert.event_date)} · ${whatsapp.formatTime(
-    party.concert.start_time,
-  )}`;
-
-  const bands = guests
-    .map(
-      (guest) => `
+  const bands = groups
+    .flatMap(({ party, guests, qrSvg, when }) =>
+      guests.map(
+        (guest) => `
     <div class="band">
-      ${endBlock(qrSvg, party, guest.name)}
+      ${endBlock(qrSvg, party.booking_reference, guest.name)}
       <div class="band__middle">
         <span class="band__brand">${esc(env.appName)}</span>
         <span class="band__event">${esc(party.concert.name)}</span>
@@ -111,17 +142,25 @@ async function renderHandBands(party, guests, { autoPrint = false, colour = DEFA
             : ''
         }</span>
       </div>
-      ${endBlock(qrSvg, party, guest.name, { flip: true })}
+      ${endBlock(qrSvg, party.booking_reference, guest.name, { flip: true })}
     </div>`,
+      ),
     )
     .join('');
 
-  const count = guests.length;
+  const count = bands ? groups.reduce((sum, group) => sum + group.guests.length, 0) : 0;
+  const first = groups[0];
+  const single = groups.length === 1;
+  const references = groups.map((group) => group.party.booking_reference);
+
+  const title = single
+    ? `Hand band${count === 1 ? '' : `s — ${count}`} ${first.party.booking_reference}`
+    : `Hand bands — ${count} across ${groups.length} bookings`;
 
   return `<!doctype html>
 <html lang="en" data-band="${esc(key)}">
 <head>
-${head(`Hand band ${party.booking_reference} — ${party.concert.name}`)}
+${head(`${title} — ${first.party.concert.name}`)}
 <!-- Second, and that order matters: band.css re-declares @page as landscape,
      overriding the portrait rule in ticket.css by later-wins. -->
 <link rel="stylesheet" href="/css/band.css">
@@ -132,13 +171,17 @@ ${head(`Hand band ${party.booking_reference} — ${party.concert.name}`)}
   <header class="bands-head no-print">
     <h1>${count === 1 ? 'Hand band' : `Hand bands — ${count}`}</h1>
     <p>
-      <strong>${esc(party.concert.name)}</strong> &middot; ${esc(when)} &middot;
-      ${esc(party.concert.venue)}
+      <strong>${esc(first.party.concert.name)}</strong> &middot; ${esc(first.when)} &middot;
+      ${esc(first.party.concert.venue)}
     </p>
     <p>
-      Booking <strong>${esc(party.booking_reference)}</strong>. Cut along the dashed lines, wrap
-      round the wrist and stick the overlap down. Each band repeats its details at both ends, so
-      it can be re-checked without turning the arm over.
+      ${
+        single
+          ? `Booking <strong>${esc(references[0])}</strong>.`
+          : `Bookings <strong>${esc(references.join(', '))}</strong>. Each band carries its own booking's code.`
+      }
+      Cut along the dashed lines, wrap round the wrist and stick the overlap down. Each band
+      repeats its details at both ends, so it can be re-checked without turning the arm over.
     </p>
   </header>
 
@@ -150,7 +193,7 @@ ${head(`Hand band ${party.booking_reference} — ${party.concert.name}`)}
   <a class="btn btn--ghost" href="${esc(env.appUrl)}/checkin.html">Back to check-in</a>
   <span class="actions__hint">
     Print at 100% scale on A4 &mdash; &ldquo;fit to page&rdquo; will shrink the strips below
-    wrist length. Check-in URL: <code>${esc(checkIn)}</code>
+    wrist length.${single ? ` Check-in URL: <code>${esc(qr.checkInUrl(references[0]))}</code>` : ''}
   </span>
 </div>
 

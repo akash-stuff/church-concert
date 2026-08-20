@@ -39,22 +39,29 @@
     loaded: {},
     seat: { map: null, zoom: 1, zone: 'all', selected: null, search: '' },
     bookings: { page: 1, search: '', status: '', concert: '', whatsapp: '' },
+    // Bookings ticked for a bulk hand-band print. Keyed by reference rather
+    // than row id: a reference is what the band route takes, and it survives the
+    // page being refetched under a filter change.
+    bandSelection: new Set(),
     users: { page: 1, search: '', status: '', verified: '', booked: '' },
     notif: { page: 1, category: 'ALL' },
     reports: { days: 90, concertId: '' },
     chartDays: 30,
-    concertView: 'cards',
+    // Table first. Staff arrive at this screen to find one concert among
+    // several and act on it, and a table shows eight of them at a glance where
+    // the card grid shows two.
+    concertView: 'table',
   };
 
   const PANELS = {
-    overview: { title: 'Overview', crumb: 'Overview' },
-    concerts: { title: 'Concerts', crumb: 'Concerts' },
-    seats: { title: 'Seat Management', crumb: 'Seat Management' },
-    bookings: { title: 'Bookings', crumb: 'Bookings' },
-    attendees: { title: 'Attendees', crumb: 'Attendees' },
-    notifications: { title: 'Notifications', crumb: 'Notifications' },
-    reports: { title: 'Reports & Export', crumb: 'Reports & Export' },
-    settings: { title: 'Settings', crumb: 'Settings' },
+    overview: { title: 'Overview' },
+    concerts: { title: 'Concerts' },
+    seats: { title: 'Seat Management' },
+    bookings: { title: 'Bookings' },
+    attendees: { title: 'Attendees' },
+    notifications: { title: 'Notifications' },
+    reports: { title: 'Reports & Export' },
+    settings: { title: 'Settings' },
   };
 
   // The bundled posters, used when a concert has none of its own. Chosen by id
@@ -225,13 +232,10 @@
       else link.removeAttribute('aria-current');
     });
 
-    $('[data-topbar-title]').textContent = PANELS[tab].title;
-    const crumb = $('[data-breadcrumb]');
-    crumb.textContent = '';
-    crumb.append(
-      el('li', {}, [el('a', { href: '#overview', text: 'Console' })]),
-      el('li', { 'aria-current': 'page', text: PANELS[tab].crumb }),
-    );
+    // The tab name goes to the document title rather than into the bar: the
+    // panel's own heading already says where you are, and a browser tab that
+    // says "Console" for eight different screens is no help either.
+    document.title = `${PANELS[tab].title} — Console`;
 
     if (push && window.location.hash !== `#${tab}`) window.location.hash = tab;
     $('[data-console]').removeAttribute('data-mobile-nav');
@@ -283,6 +287,7 @@
       if (!term) return;
       state.bookings = { ...state.bookings, search: term, page: 1 };
       $('[data-booking-search]').value = term;
+      state.bandSelection.clear();
       state.loaded.bookings = false;
       setTab('bookings');
     });
@@ -479,8 +484,6 @@
     await Promise.all([
       drawBookingChart(),
       drawOccupancy($('[data-occupancy-chart]'), totals),
-      drawUpcoming(concerts),
-      drawRecentBookings(),
     ]);
 
     once('overview:range', () => {
@@ -594,49 +597,6 @@
     requestAnimationFrame(() => setWidth(fill, occupancy));
     paintAllIcons(tile);
     return tile;
-  }
-
-  function drawUpcoming(concerts) {
-    const box = $('[data-upcoming]');
-    const today = new Date().toISOString().slice(0, 10);
-    const upcoming = concerts
-      .filter((c) => c.is_active && String(c.event_date).slice(0, 10) >= today)
-      .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))
-      .slice(0, 3);
-
-    box.textContent = '';
-    if (!upcoming.length) {
-      UI.empty(box, {
-        title: 'No concerts coming up',
-        message: 'Create a concert to open seat reservations.',
-        icon: 'music',
-        action: { label: 'Create concert', onClick: () => createConcert() },
-      });
-      return;
-    }
-    for (const concert of upcoming) box.append(concertTile(concert));
-  }
-
-  async function drawRecentBookings() {
-    const box = $('[data-recent-bookings]');
-    UI.skeleton(box, { kind: 'row', count: 5 });
-    const { bookings } = await api('/api/admin/bookings?per_page=8');
-
-    if (!bookings.length) {
-      UI.empty(box, {
-        title: 'No bookings yet',
-        message: 'Reservations will appear here as they come in.',
-        icon: 'ticket',
-      });
-      return;
-    }
-
-    box.textContent = '';
-    box.append(
-      bookingsTable(bookings, {
-        columns: ['ref', 'customer', 'concert', 'seats', 'status', 'date'],
-      }),
-    );
   }
 
   // ==========================================================================
@@ -1230,10 +1190,91 @@
     zone.value = current && [...zone.options].some((o) => o.value === current) ? current : 'all';
     state.seat.zone = zone.value;
 
+    renderCapacity();
     renderSeatStats();
     renderSeatMap();
     renderSeatLegend();
     renderInspector();
+  }
+
+  /** Seats laid out for the current concert, however many sections they span. */
+  const seatsLaidOut = () =>
+    (state.seat.map?.sections || []).reduce((sum, section) => sum + section.seats.length, 0);
+
+  /**
+   * How much of the concert's capacity the plan has used.
+   *
+   * Capacity is the number staff type into the concert form; seats laid out is
+   * what exists on the plan. Nothing used to compare the two, so an auditorium
+   * could quietly grow past a capacity of 100 and the only symptom was an
+   * occupancy figure above 100% on another screen.
+   *
+   * The totals come from the seat-map response, which is the same query the
+   * server enforces the limit with. The laid-out count is taken from the map on
+   * screen rather than the response so it stays right after seats are spliced
+   * in without a refetch.
+   */
+  function capacityState() {
+    const map = state.seat.map;
+    const concert =
+      map?.concert || state.concerts.find((c) => c.id === Number(state.concertId)) || null;
+    const capacity = Number(map?.capacity?.total ?? concert?.max_capacity) || 0;
+    const laidOut = seatsLaidOut();
+    const remaining = capacity - laidOut;
+    return {
+      concert,
+      capacity,
+      laidOut,
+      remaining,
+      percent: capacity ? Math.round((laidOut / capacity) * 100) : 0,
+      tone: !capacity
+        ? 'ok'
+        : remaining < 0
+          ? 'over'
+          : laidOut / capacity >= 0.9
+            ? 'warn'
+            : 'ok',
+    };
+  }
+
+  function renderCapacity() {
+    const box = $('[data-seat-capacity]');
+    if (!box) return;
+
+    const { concert, capacity, laidOut, remaining, percent, tone } = capacityState();
+    if (!concert || !capacity) {
+      box.hidden = true;
+      return;
+    }
+
+    box.hidden = false;
+    box.dataset.tone = tone;
+    box.textContent = '';
+
+    const fill = el('i');
+    box.append(
+      el('div', { class: 'capacity-bar__top' }, [
+        el('span', { class: 'capacity-bar__label', text: `Capacity — ${concert.name}` }),
+        el('span', { class: 'capacity-bar__value' }, [
+          el('strong', { text: String(laidOut) }),
+          ` of ${capacity} seats laid out · `,
+          el('strong', {
+            text: remaining >= 0 ? `${remaining} left to create` : `${Math.abs(remaining)} over capacity`,
+          }),
+        ]),
+      ]),
+      el('div', { class: 'capacity-bar__rail' }, [fill]),
+      el('p', {
+        class: 'capacity-bar__note',
+        text:
+          remaining > 0
+            ? `Adding seats stops at ${capacity}. Raise the capacity on the concert to lay out more.`
+            : remaining === 0
+              ? 'Every seat in this concert’s capacity has been laid out.'
+              : 'The plan holds more seats than the concert allows. Raise the capacity, or remove seats.',
+      }),
+    );
+    requestAnimationFrame(() => setWidth(fill, percent));
   }
 
   /**
@@ -1266,6 +1307,7 @@
         String(a.seat_number).localeCompare(String(b.seat_number)),
     );
 
+    renderCapacity();
     renderSeatStats();
     renderSeatMap();
     renderSeatLegend();
@@ -1446,7 +1488,6 @@
       el('dl', { class: 'facts facts--stacked' }, [
         fact('Seat', seat.seat_number),
         fact('Section', seat.section_name),
-        fact('Admission', 'Free'),
       ]),
       el('div', { class: 'u-flex' }, [statusChip(seat.status)]),
     );
@@ -1612,10 +1653,26 @@
       return;
     }
 
+    // The balance, worked out before the drawer opens. Laying out more seats
+    // than the concert's capacity used to be possible and silent; now the
+    // remaining figure is on screen, the range is capped to it, and the server
+    // refuses the request as well.
+    const { capacity, laidOut, remaining } = capacityState();
+    if (capacity && remaining <= 0) {
+      UI.toastError(
+        'No capacity left',
+        `${laidOut} of ${capacity} seats are already laid out. Raise the capacity on the concert to add more.`,
+      );
+      return;
+    }
+
     const picker = el('select', { id: 'bulk_section', name: 'section_id', required: true });
     for (const section of sections) {
       picker.append(el('option', { value: section.id, text: section.name }));
     }
+
+    const toField = numberField('bulk_to', 'to', 'To', 'number', '20');
+    const runNote = el('p', { class: 'field__hint' });
 
     const form = el('form', {}, [
       el('div', { class: 'field' }, [
@@ -1629,14 +1686,38 @@
       el('div', { class: 'grid-3' }, [
         numberField('bulk_prefix', 'prefix', 'Prefix', 'text', 'A'),
         numberField('bulk_from', 'from', 'From', 'number', '1'),
-        numberField('bulk_to', 'to', 'To', 'number', '20'),
+        toField,
       ]),
       el('p', { class: 'field__hint', text: 'Prefix A, 1 to 20 creates A01 through A20.' }),
+      runNote,
     ]);
+
+    // Live count against the balance, so the number is checked while it is
+    // being typed rather than after the request comes back.
+    const updateNote = () => {
+      const from = Number(form.querySelector('[name="from"]').value);
+      const to = Number(form.querySelector('[name="to"]').value);
+      const wanted = Number.isFinite(from) && Number.isFinite(to) && to >= from ? to - from + 1 : 0;
+      if (!capacity) {
+        runNote.textContent = `${wanted} seat${wanted === 1 ? '' : 's'} in this run. This concert has no capacity set.`;
+        runNote.dataset.tone = '';
+        return;
+      }
+      runNote.textContent =
+        `${wanted} seat${wanted === 1 ? '' : 's'} in this run · ${remaining} of ${capacity} still available` +
+        (wanted > remaining ? ` — ${wanted - remaining} too many.` : '.');
+      runNote.dataset.tone = wanted > remaining ? 'error' : '';
+    };
+    for (const name of ['from', 'to']) {
+      form.querySelector(`[name="${name}"]`).addEventListener('input', updateNote);
+    }
+    updateNote();
 
     UI.drawer({
       title: 'Add a run of seats',
-      subtitle: 'Numbers are zero-padded to two digits.',
+      subtitle: capacity
+        ? `${remaining} of ${capacity} seats left in this concert's capacity.`
+        : 'Numbers are zero-padded to two digits.',
       render: (body) => body.append(form),
       actions: [
         { label: 'Cancel', onClick: ({ close }) => close() },
@@ -1649,6 +1730,17 @@
           // first would leave nowhere to show a validation error.
           onClick: async ({ close, button }) => {
             showFieldErrors(form, {});
+
+            const from = Number(form.querySelector('[name="from"]').value);
+            const to = Number(form.querySelector('[name="to"]').value);
+            const wanted = to >= from ? to - from + 1 : 0;
+            if (capacity && wanted > remaining) {
+              showFieldErrors(form, {
+                to: `Only ${remaining} seat${remaining === 1 ? '' : 's'} left in the ${capacity}-seat capacity.`,
+              });
+              return;
+            }
+
             busy(button, true, 'Adding…');
             try {
               const result = await api(`/api/admin/seats/bulk?concert_id=${state.concertId}`, {
@@ -1697,6 +1789,7 @@
     const show = new Set(columns || ['ref', 'customer', 'concert', 'seats', 'status', 'date', 'actions']);
     const head = el('tr');
     const headings = {
+      pick: '',
       ref: 'Booking ID',
       customer: 'Guest',
       concert: 'Concert',
@@ -1706,7 +1799,30 @@
       date: 'Booked',
       actions: '',
     };
-    for (const key of show) head.append(el('th', { text: headings[key] }));
+    for (const key of show) {
+      if (key === 'pick') {
+        // Header tick selects every row on this page. Not every row matching
+        // the filter — the console only holds the page it fetched, and a box
+        // that claimed to select 400 unseen bookings would be lying.
+        const all = rows.length > 0 && rows.every((row) => state.bandSelection.has(row.booking_reference));
+        const box = el('input', {
+          type: 'checkbox',
+          checked: all ? true : null,
+          'aria-label': 'Select every booking on this page',
+          title: 'Select every booking on this page',
+        });
+        box.addEventListener('change', () => {
+          for (const row of rows) {
+            if (box.checked) state.bandSelection.add(row.booking_reference);
+            else state.bandSelection.delete(row.booking_reference);
+          }
+          syncBandSelection();
+        });
+        head.append(el('th', { class: 'data-table__pick' }, [box]));
+        continue;
+      }
+      head.append(el('th', { text: headings[key] }));
+    }
 
     const body = el('tbody');
     for (const row of rows) {
@@ -1719,6 +1835,21 @@
       }
 
       const cells = {
+        pick: () => {
+          const box = el('input', {
+            type: 'checkbox',
+            checked: state.bandSelection.has(row.booking_reference) ? true : null,
+            'data-band-pick': row.booking_reference,
+            'aria-label': `Select ${row.booking_reference}`,
+          });
+          box.addEventListener('click', (event) => event.stopPropagation());
+          box.addEventListener('change', () => {
+            if (box.checked) state.bandSelection.add(row.booking_reference);
+            else state.bandSelection.delete(row.booking_reference);
+            syncBandSelection();
+          });
+          return el('td', { class: 'data-table__pick' }, [box]);
+        },
         ref: () => el('td', {}, [el('span', { class: 'data-table__ref', text: row.booking_reference })]),
         /* The guest is the headline, the account holder the subtitle. On a
            family booking those differ, and the person a steward or an
@@ -1778,12 +1909,65 @@
   const currentConcertName = (row) =>
     row.concert_name || state.concerts.find((c) => c.id === row.concert_id)?.name || '—';
 
+  /** Reflect the tick set in the bulk bar and in the header checkbox. */
+  function syncBandSelection() {
+    const bar = $('[data-band-bar]');
+    if (!bar) return;
+    const count = state.bandSelection.size;
+    bar.hidden = count === 0;
+    $('[data-band-count]').textContent = `${count} booking${count === 1 ? '' : 's'} selected`;
+
+    for (const box of $$('[data-band-pick]')) {
+      box.checked = state.bandSelection.has(box.dataset.bandPick);
+    }
+    const header = $('.data-table__pick input:not([data-band-pick])');
+    if (header) {
+      const boxes = $$('[data-band-pick]');
+      header.checked = boxes.length > 0 && boxes.every((box) => box.checked);
+    }
+  }
+
+  /**
+   * One sheet of hand bands for every ticked booking.
+   *
+   * A door checks in a queue of parties, so printing them one at a time is six
+   * trips to the printer for one queue. The server renders every band on a
+   * single page, each still carrying its own booking's reference and QR.
+   */
+  function printSelectedBands() {
+    const references = [...state.bandSelection];
+    if (!references.length) {
+      UI.toastError('Nothing selected', 'Tick the bookings you want bands for.');
+      return;
+    }
+    const url = `/api/admin/bookings/band?refs=${encodeURIComponent(references.join(','))}`;
+    const win = window.open(url, '_blank', 'noopener');
+    if (!win) {
+      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to open the bands.');
+      return;
+    }
+    UI.toastSuccess(
+      'Bands opened',
+      `${references.length} booking${references.length === 1 ? '' : 's'} on one sheet. Print at 100% scale.`,
+    );
+  }
+
   async function loadBookings() {
     await renderBookings();
+
+    once('bookings:bulk', () => {
+      $('[data-action="print-bands"]').addEventListener('click', printSelectedBands);
+      $('[data-action="clear-bands"]').addEventListener('click', () => {
+        state.bandSelection.clear();
+        syncBandSelection();
+      });
+    });
 
     once('bookings:filters', () => {
       const rerun = () => {
         state.bookings.page = 1;
+        // What was ticked belonged to the old result set.
+        state.bandSelection.clear();
         renderBookings().catch((error) => fail(error, 'Could not load bookings'));
       };
       $('[data-booking-search]').addEventListener('input', debounce(rerun, 300));
@@ -1827,11 +2011,27 @@
     } else {
       box.append(
         bookingsTable(rows, {
-          columns: ['ref', 'customer', 'concert', 'seats', 'status', 'whatsapp', 'date', 'actions'],
+          columns: [
+            'pick',
+            'ref',
+            'customer',
+            'concert',
+            'seats',
+            'status',
+            'whatsapp',
+            'date',
+            'actions',
+          ],
           onOpen: showBooking,
         }),
       );
     }
+
+    // Ticks survive paging — a steward checking in a queue works down several
+    // pages and prints once. They do not survive a filter change; that is
+    // handled where the filters are bound, because a count of nine carried over
+    // from another concert would be a lie rather than a convenience.
+    syncBandSelection();
 
     renderPager($('[data-bookings-pager]'), pagination, rows.length, (page) => {
       state.bookings.page = page;
@@ -1865,53 +2065,71 @@
     );
   }
 
+  /**
+   * One booking, in a drawer.
+   *
+   * Deliberately says each thing once. It used to print the reference in the
+   * title and again under Ticket, the account holder's name in the subtitle,
+   * under Account holder and again as "Booked by", the WhatsApp state as both
+   * "Verified" and "Delivery", and a guest block that fell back to the account
+   * holder's own details — so a booking with no separate guest showed the same
+   * four values twice under two headings. All of that is gone.
+   *
+   * The guest section now appears only when the guest really is somebody else,
+   * which is the case it was added for.
+   */
   function showBooking(row) {
+    const guestName = row.guest_name || null;
+    const separateGuest = Boolean(guestName && guestName !== row.full_name);
+
     UI.drawer({
       title: row.booking_reference,
-      subtitle: `${row.full_name || 'Attendee'} · ${row.status.toLowerCase()}`,
+      subtitle: `${separateGuest ? guestName : row.full_name || 'Attendee'} · ${currentConcertName(row)}`,
       render(body) {
         body.append(
-          el('div', { class: 'u-flex' }, [statusChip(row.status), el('span', { class: 'chip chip--gold', text: 'Admission free' })]),
-
-          el('h3', { text: 'Account holder' }),
-          el('dl', { class: 'facts' }, [
-            fact('Name', row.full_name || '—'),
-            fact('Email', row.email || '—'),
-            fact('WhatsApp', row.whatsapp_number || '—'),
-            fact('Verified', row.whatsapp_verified ? 'Yes' : 'Not yet'),
+          el('div', { class: 'u-flex' }, [
+            statusChip(row.status),
+            row.whatsapp_verified
+              ? el('span', { class: 'chip chip--ok', text: 'WhatsApp verified' })
+              : el('span', { class: 'chip chip--wait', text: 'WhatsApp pending' }),
+            row.source === 'ADMIN' ? el('span', { class: 'chip chip--neutral', text: 'Booked by staff' }) : null,
           ]),
 
-          el('h3', { text: 'Concert' }),
+          el('h3', { text: 'Seat' }),
           el('dl', { class: 'facts' }, [
             fact('Concert', currentConcertName(row)),
             fact('Seat', row.seat_number || '—'),
             fact('Section', row.section_name || '—'),
           ]),
 
-          el('h3', { text: 'Guest in this seat' }),
+          el('h3', { text: separateGuest ? 'Booked by' : 'Attendee' }),
           el('dl', { class: 'facts' }, [
-            fact('Name', row.guest_name || row.full_name),
-            fact('Email', row.guest_email || row.email),
-            fact('Phone', row.guest_phone || row.whatsapp_number),
-            row.guest_age !== null && row.guest_age !== undefined
-              ? fact(
-                  'Age',
-                  Number(row.guest_age) < 18 ? `${row.guest_age} — under 18` : String(row.guest_age),
-                )
-              : null,
+            fact('Name', row.full_name || '—'),
+            fact('Email', row.email || '—'),
+            fact('WhatsApp', row.whatsapp_number || '—'),
           ]),
-
-          el('h3', { text: 'Ticket' }),
-          el('dl', { class: 'facts' }, [
-            fact('Reference', row.booking_reference),
-            fact('Booked by', row.full_name),
-            fact('Created by', row.source === 'ADMIN' ? 'Staff' : 'The attendee'),
-            fact('Delivery', row.whatsapp_verified ? 'WhatsApp confirmation sent' : 'Awaiting WhatsApp verification'),
-          ]),
-
-          el('h3', { text: 'Timeline' }),
-          bookingTimeline(row),
         );
+
+        // Only when the seat is somebody else's. Otherwise this block repeated
+        // the three facts directly above it.
+        if (separateGuest) {
+          body.append(
+            el('h3', { text: 'Guest in this seat' }),
+            el('dl', { class: 'facts' }, [
+              fact('Name', guestName),
+              row.guest_email ? fact('Email', row.guest_email) : null,
+              row.guest_phone ? fact('Phone', row.guest_phone) : null,
+              row.guest_age !== null && row.guest_age !== undefined
+                ? fact(
+                    'Age',
+                    Number(row.guest_age) < 18 ? `${row.guest_age} — under 18` : String(row.guest_age),
+                  )
+                : null,
+            ]),
+          );
+        }
+
+        body.append(el('h3', { text: 'Timeline' }), bookingTimeline(row));
       },
       actions: [
         { label: 'Download ticket', onClick: () => downloadTicket(row) },
@@ -2546,10 +2764,15 @@
       }),
     );
 
-    UI.lineChart($('[data-report-trend]'), trend.series, [
-      { key: 'seats', label: 'Seats' },
-      { key: 'cancellations', label: 'Cancelled', accent: true },
-    ]);
+    UI.lineChart(
+      $('[data-report-trend]'),
+      trend.series,
+      [
+        { key: 'seats', label: 'Seats' },
+        { key: 'cancellations', label: 'Cancelled', accent: true },
+      ],
+      { height: 200 },
+    );
 
     UI.stackChart($('[data-report-occupancy]'), [
       { label: 'Booked', value: summary.seats.booked, tone: 'booked' },
@@ -2567,37 +2790,53 @@
     renderExports();
   }
 
+  /**
+   * One row per report rather than one card per report.
+   *
+   * Four 16rem cards wrapped onto two lines and added most of the length that
+   * made this page scroll. A row states the report and offers its two formats,
+   * which is all the card ever did.
+   */
   function renderExports() {
     const box = $('[data-exports]');
     box.textContent = '';
+
+    const list = el('div', { class: 'export-list' });
     for (const report of REPORTS) {
-      const icon = el('span', { class: 'export-card__icon', 'aria-hidden': 'true' });
+      const icon = el('span', { class: 'export-row__icon', 'aria-hidden': 'true' });
       paintIcon(icon, report.icon, '--export-icon');
 
-      const formats = el('div', { class: 'export-card__formats' }, [
-        el('button', {
-          class: 'btn btn--ghost btn--small',
-          type: 'button',
-          text: 'CSV',
-          onClick: (event) => exportReport(report, 'csv', event.currentTarget),
-        }),
-        el('button', {
-          class: 'btn btn--ghost btn--small',
-          type: 'button',
-          text: 'PDF',
-          onClick: (event) => exportReport(report, 'pdf', event.currentTarget),
-        }),
-      ]);
-
-      box.append(
-        el('article', { class: 'export-card' }, [
+      list.append(
+        el('article', { class: 'export-row' }, [
           icon,
-          el('h3', { text: report.title }),
-          el('p', { text: report.body }),
-          formats,
+          el('div', { class: 'export-row__text' }, [
+            el('strong', { text: report.title }),
+            el('span', { text: report.body }),
+          ]),
+          el('div', { class: 'export-row__formats' }, [
+            el('button', {
+              class: 'btn btn--ghost btn--small',
+              type: 'button',
+              text: 'CSV',
+              onClick: (event) => exportReport(report, 'csv', event.currentTarget),
+            }),
+            el('button', {
+              class: 'btn btn--ghost btn--small',
+              type: 'button',
+              text: 'PDF',
+              onClick: (event) => exportReport(report, 'pdf', event.currentTarget),
+            }),
+          ]),
         ]),
       );
     }
+    box.append(
+      list,
+      el('p', {
+        class: 'field__hint',
+        text: 'PDF opens a print-ready page — choose “Save as PDF” in the print dialog.',
+      }),
+    );
   }
 
   /**
