@@ -446,7 +446,11 @@ router.get(
       : parties[0];
     if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
 
-    res.type('html').send(renderTicket(party, req.user));
+    // ?print=1 opens the print dialog on load, which is what the "Download PDF"
+    // links point at; without it the page is a readable preview.
+    res.type('html').send(
+      await renderTicket(party, req.user, { autoPrint: req.query.print === '1' }),
+    );
   }),
 );
 

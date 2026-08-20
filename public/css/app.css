@@ -5442,3 +5442,196 @@ input[type='search'] {
   font-variant-numeric: tabular-nums;
   vertical-align: middle;
 }
+
+/* --- Door check-in ---------------------------------------------------------
+   Read at arm's length, in a porch, on a phone, by somebody holding a torch in
+   the other hand. The verdict is the biggest thing on the page and carries a
+   glyph as well as a colour, because "green means yes" is no use to a steward
+   who is colour-blind or squinting at a dim screen.
+   ------------------------------------------------------------------------- */
+
+.checkin-body {
+  background: var(--page);
+  min-height: 100vh;
+}
+.checkin__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--gradient-brand);
+  color: #fff;
+}
+.checkin__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: #fff;
+  text-decoration: none;
+}
+.checkin__brand img {
+  border-radius: 9px;
+}
+.checkin__brand strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 0.9375rem;
+  line-height: 1.2;
+}
+.checkin__brand span span {
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-light);
+}
+.checkin {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+.checkin__form {
+  padding: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.checkin__form input {
+  font-family: var(--mono);
+  font-size: 1.125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.verdict {
+  padding: var(--space-6) var(--space-5);
+  margin-bottom: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--line);
+  background: var(--surface);
+  text-align: center;
+  animation: cc-pop 0.3s var(--ease-spring) both;
+}
+.verdict__mark {
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 auto var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.verdict__heading {
+  margin: 0 0 var(--space-2);
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+.verdict__message {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+  color: var(--body-ink);
+}
+.verdict__ref {
+  margin: 0 0 var(--space-4);
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.verdict__facts {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  text-align: left;
+}
+.verdict__facts > div {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.verdict__facts dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.verdict__facts dd {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.verdict__seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+.verdict__seat {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 4rem;
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--brand);
+  border-radius: 10px 10px 6px 6px;
+  background: var(--wash);
+}
+.verdict__seat b {
+  font-family: var(--mono);
+  font-size: 1.125rem;
+  color: var(--brand);
+}
+.verdict__seat i {
+  font-style: normal;
+  font-size: 0.625rem;
+  color: var(--muted);
+}
+
+.verdict[data-tone='ok'] {
+  border-color: var(--ok);
+  background: var(--ok-wash);
+}
+.verdict[data-tone='ok'] .verdict__mark {
+  background: var(--ok);
+  color: #fff;
+}
+.verdict[data-tone='off'] {
+  border-color: var(--danger);
+  background: var(--danger-wash);
+}
+.verdict[data-tone='off'] .verdict__mark {
+  background: var(--danger);
+  color: #fff;
+}
+.verdict[data-tone='wait'] {
+  border-color: var(--warn);
+  background: var(--warn-wash);
+}
+.verdict[data-tone='wait'] .verdict__mark {
+  background: var(--warn);
+  color: #fff;
+}
+
+/* Banner artwork at the head of a flush card — the confirmation page uses the
+   same illustration as the printed ticket, so the screen and the paper look
+   like the same document. */
+.confirm-art {
+  margin: 0;
+  aspect-ratio: 1200 / 300;
+  overflow: hidden;
+}
+.confirm-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

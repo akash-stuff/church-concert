@@ -164,13 +164,21 @@
         }),
       );
 
+      const ticketUrl = `/api/bookings/mine/confirmation?reference=${encodeURIComponent(party.booking_reference)}`;
       const actions = el('div', { class: 'btn-row' }, [
         el('a', {
-          class: 'btn btn--ghost btn--small',
-          href: `/api/bookings/mine/confirmation?reference=${encodeURIComponent(party.booking_reference)}`,
+          class: 'btn btn--primary btn--small',
+          href: `${ticketUrl}&print=1`,
           target: '_blank',
           rel: 'noopener',
-          text: 'Print',
+          text: 'Download ticket',
+        }),
+        el('a', {
+          class: 'btn btn--ghost btn--small',
+          href: ticketUrl,
+          target: '_blank',
+          rel: 'noopener',
+          text: 'View',
         }),
       ]);
 

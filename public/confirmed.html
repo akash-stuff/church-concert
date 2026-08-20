@@ -25,7 +25,11 @@
       <div class="wrap wrap--narrow stack">
         <div class="notice" data-notice></div>
 
-        <div class="card">
+        <div class="card card--flush">
+          <figure class="confirm-art">
+            <img src="/assets/ticket-banner.svg" alt="" width="1200" height="300" />
+          </figure>
+          <div class="card__body">
           <div class="success-mark" aria-hidden="true"></div>
           <p class="eyebrow">Booking successful</p>
           <h1 class="mb-xs" data-headline>Your seats are reserved</h1>
@@ -38,10 +42,19 @@
           <dl class="detail" data-booking-detail></dl>
 
           <div class="btn-row mt-lg">
-            <a class="btn btn--primary" href="/api/bookings/mine/confirmation" target="_blank" rel="noopener" data-print-link>
-              Print confirmation
+            <a class="btn btn--primary" href="/api/bookings/mine/confirmation?print=1" target="_blank" rel="noopener" data-print-link>
+              Download ticket (PDF)
+            </a>
+            <a class="btn btn--ghost" href="/api/bookings/mine/confirmation" target="_blank" rel="noopener" data-view-link>
+              View ticket
             </a>
             <a class="btn btn--ghost" href="/dashboard.html">Go to my dashboard</a>
+          </div>
+
+          <p class="muted text-sm mt-md mb-0">
+            Your ticket carries a QR code. Stewards scan it at the door — bring it on paper or on
+            your phone, whichever is easier.
+          </p>
           </div>
         </div>
 

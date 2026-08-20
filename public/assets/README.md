@@ -27,6 +27,9 @@ new in `icons/` should follow the same rule — 24×24 viewBox, `currentColor`,
 | `church.svg` | Fixed page decoration on the sign-in, register, recovery, verify and 404 pages |
 | `sprig.svg` | The other half of that decoration, bottom left |
 | `crowd.svg` | Welcome banner on the attendee dashboard |
+| `ticket-banner.svg` | Masthead strip on the printable ticket, and the head of the confirmation page — the same image in both so screen and paper match |
+| `ticket-crest.svg` | Crest beside the "on the night" notes on the ticket |
+| `auth-backdrop.svg` | Full-bleed backdrop on the staff sign-in page |
 | `icons/*.svg` | 24px line icons. `calendar`, `clock` and `pin` label the hero details as CSS backgrounds; `pin` also marks a concert card's venue. The rest are masks: `check` draws `.success-mark` on the confirmation page, `chevron` the arrow on every custom select, `eye`/`eye-off` the password reveal, and `user`, `mail`, `phone`, `whatsapp`, `lock`, `key`, `home`, `identity`, `lifebuoy`, `shield`, `calendar`, `clock`, `pin`, `seat`, `ticket`, `note`, `music`, `users` the leading marks inside form fields (`.field__icon[data-icon="…"]`). `search` and `info` are spare stock. |
 
 ## Adding an image

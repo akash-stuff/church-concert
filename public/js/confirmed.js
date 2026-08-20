@@ -40,8 +40,12 @@
   $('[data-headline]').textContent =
     seatCount === 1 ? 'Your seat is reserved' : `Your ${seatCount} seats are reserved`;
   $('[data-reference]').textContent = party.booking_reference;
-  $('[data-print-link]').href =
-    `/api/bookings/mine/confirmation?reference=${encodeURIComponent(party.booking_reference)}`;
+  const ticketUrl = `/api/bookings/mine/confirmation?reference=${encodeURIComponent(party.booking_reference)}`;
+  // print=1 opens the print dialog on load, which is how "Download PDF" works
+  // without shipping a PDF writer; the plain URL is the readable preview.
+  $('[data-print-link]').href = `${ticketUrl}&print=1`;
+  const viewLink = $('[data-view-link]');
+  if (viewLink) viewLink.href = ticketUrl;
 
   const detail = $('[data-booking-detail]');
   detail.textContent = '';

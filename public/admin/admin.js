@@ -216,7 +216,9 @@
     $$('[data-panel]').forEach((panel) => {
       panel.hidden = panel.dataset.panel !== tab;
     });
-    $$('.sidebar__link').forEach((link) => {
+    // Scoped to [data-tab]: the sidebar also holds a plain link (Door check-in)
+    // that leaves the console entirely, and it is not a tab.
+    $$('.sidebar__link[data-tab]').forEach((link) => {
       const active = link.dataset.tab === tab;
       link.setAttribute('aria-selected', String(active));
       if (active) link.setAttribute('aria-current', 'page');
@@ -241,7 +243,7 @@
   function mountShell() {
     paintAllIcons();
 
-    $$('.sidebar__link').forEach((link) => {
+    $$('.sidebar__link[data-tab]').forEach((link) => {
       link.addEventListener('click', () => setTab(link.dataset.tab));
     });
     $$('[data-goto]').forEach((node) => {
@@ -1868,7 +1870,7 @@
     // The staff route, not /bookings/mine/confirmation — that one is scoped to
     // the signed-in attendee and an admin session would not satisfy it.
     window.open(
-      `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/ticket`,
+      `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/ticket?print=1`,
       '_blank',
       'noopener',
     );
@@ -2505,49 +2507,163 @@
     UI.toastSuccess('Export ready', `${report.title} downloaded.`);
   }
 
+  /**
+   * A branded, print-ready report.
+   *
+   * Built with DOM calls rather than innerHTML because the values come from the
+   * database — a concert someone named `<script>` would otherwise execute in
+   * the new window. Styling is a <style> element, which is fine: this is a
+   * document this script created, not one served under the site's CSP.
+   */
   function printReport(report, rows, columns) {
-    const win = window.open('', '_blank', 'noopener,width=1024,height=768');
+    const win = window.open('', '_blank', 'width=1024,height=768');
     if (!win) {
-      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to print a report.');
+      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to save a report as PDF.');
       return;
     }
     const doc = win.document;
-    doc.title = report.title;
+    doc.title = `${report.title} — ${state.admin?.full_name ? 'Night of Worship' : 'Report'}`;
+
+    const meta = doc.createElement('meta');
+    meta.setAttribute('charset', 'utf-8');
+    doc.head.append(meta);
 
     const style = doc.createElement('style');
-    style.textContent =
-      'body{font:13px system-ui,sans-serif;color:#0f172a;padding:32px}h1{font-size:20px;margin:0 0 4px}p{color:#64748b;margin:0 0 24px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e6eaf0}th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b}';
+    style.textContent = `
+      @page { size: A4 landscape; margin: 12mm; }
+      * { box-sizing: border-box; }
+      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { margin: 0; padding: 28px 32px 40px; color: #0f172a; background: #fff;
+             font: 12.5px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+      .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+              padding-bottom: 14px; margin-bottom: 20px; border-bottom: 3px solid #b58328; }
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand img { width: 34px; height: 34px; }
+      .brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
+      .brand span { display: block; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #b58328; }
+      h1 { margin: 14px 0 2px; font-size: 21px; letter-spacing: -.02em; }
+      .lede { margin: 0; font-size: 12px; color: #64748b; max-width: 80ch; }
+      .stamp { text-align: right; font-size: 10.5px; color: #64748b; line-height: 1.7; }
+      .stamp b { display: block; color: #0f172a; font-size: 12px; }
+      table { border-collapse: collapse; width: 100%; margin-top: 18px; }
+      thead { display: table-header-group; }
+      th { text-align: left; padding: 9px 10px; background: #16233d; color: #fff;
+           font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+      th:first-child { border-radius: 6px 0 0 0; }
+      th:last-child { border-radius: 0 6px 0 0; }
+      td { padding: 8px 10px; border-bottom: 1px solid #e6eaf0; }
+      tbody tr:nth-child(even) td { background: #fbfcfd; }
+      tbody tr { page-break-inside: avoid; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .foot { margin-top: 22px; padding-top: 12px; border-top: 1px solid #e6eaf0;
+              display: flex; justify-content: space-between; font-size: 10px; color: #64748b; }
+      .free { color: #b58328; font-weight: 700; }
+      @media print { .noprint { display: none; } }
+    `;
     doc.head.append(style);
+
+    // --- Header ---
+    const head = doc.createElement('div');
+    head.className = 'head';
+
+    const left = doc.createElement('div');
+    const brand = doc.createElement('div');
+    brand.className = 'brand';
+    const logo = doc.createElement('img');
+    logo.src = `${window.location.origin}/assets/logo.svg`;
+    logo.alt = '';
+    const words = doc.createElement('div');
+    const b = doc.createElement('b');
+    b.textContent = 'Night of Worship';
+    const sp = doc.createElement('span');
+    sp.textContent = 'Concert management';
+    words.append(b, sp);
+    brand.append(logo, words);
 
     const h1 = doc.createElement('h1');
     h1.textContent = report.title;
-    const sub = doc.createElement('p');
-    sub.textContent = `${report.body} Generated ${new Date().toLocaleString()}.`;
+    const lede = doc.createElement('p');
+    lede.className = 'lede';
+    lede.textContent = report.body;
+    left.append(brand, h1, lede);
 
+    const stamp = doc.createElement('div');
+    stamp.className = 'stamp';
+    const when = doc.createElement('b');
+    when.textContent = new Date().toLocaleDateString(undefined, {
+      day: 'numeric', month: 'long', year: 'numeric',
+    });
+    stamp.append(when);
+    stamp.append(doc.createTextNode(`Generated ${new Date().toLocaleTimeString()}`));
+    stamp.append(doc.createElement('br'));
+    stamp.append(doc.createTextNode(`By ${state.admin?.full_name || 'the console'}`));
+    stamp.append(doc.createElement('br'));
+    stamp.append(doc.createTextNode(`${rows.length} row${rows.length === 1 ? '' : 's'}`));
+
+    head.append(left, stamp);
+
+    // --- Table ---
     const table = doc.createElement('table');
     const thead = doc.createElement('thead');
     const headRow = doc.createElement('tr');
-    for (const [, label] of columns) {
+    for (const [key, label] of columns) {
       const th = doc.createElement('th');
       th.textContent = label;
+      if (NUMERIC_COLUMNS.has(key)) th.className = 'num';
       headRow.append(th);
     }
     thead.append(headRow);
+
     const tbody = doc.createElement('tbody');
     for (const row of rows) {
       const tr = doc.createElement('tr');
       for (const [key] of columns) {
         const td = doc.createElement('td');
-        td.textContent = key === 'event_date' ? String(row[key]).slice(0, 10) : String(row[key] ?? '');
+        if (NUMERIC_COLUMNS.has(key)) td.className = 'num';
+        td.textContent =
+          key === 'event_date'
+            ? formatDate(row[key])
+            : key === 'occupancy'
+              ? `${row[key]}%`
+              : String(row[key] ?? '');
         tr.append(td);
       }
       tbody.append(tr);
     }
     table.append(thead, tbody);
-    doc.body.append(h1, sub, table);
-    win.focus();
-    win.print();
+
+    // --- Footer ---
+    const foot = doc.createElement('div');
+    foot.className = 'foot';
+    const freeNote = doc.createElement('span');
+    freeNote.append(doc.createTextNode('Admission is free — this report contains no financial data. '));
+    const em = doc.createElement('span');
+    em.className = 'free';
+    em.textContent = 'No payments are ever collected.';
+    freeNote.append(em);
+    const src = doc.createElement('span');
+    src.textContent = window.location.origin;
+    foot.append(freeNote, src);
+
+    doc.body.append(head, table, foot);
+
+    // Printing before the logo has decoded gives a report with a hole in it.
+    const go = () => {
+      win.focus();
+      win.print();
+    };
+    if (logo.complete) go();
+    else {
+      logo.addEventListener('load', go);
+      logo.addEventListener('error', go);
+    }
   }
+
+  /** Columns that should sit right-aligned and tabular in a printed report. */
+  const NUMERIC_COLUMNS = new Set([
+    'max_capacity', 'total_seats', 'booked_seats', 'available_seats',
+    'reserved_seats', 'blocked_seats', 'parties', 'cancellations', 'occupancy',
+  ]);
 
   // ==========================================================================
   // Settings

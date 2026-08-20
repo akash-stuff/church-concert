@@ -2,6 +2,7 @@
 
 const nodemailer = require('nodemailer');
 const env = require('../env');
+const qr = require('../lib/qr');
 
 /**
  * Email delivery, over Gmail SMTP by default.
@@ -259,6 +260,23 @@ async function sendPasswordReset({ to, name, link, minutes }) {
   return { ...result, body: text };
 }
 
+/**
+ * The ticket QR, as a PNG data URI.
+ *
+ * PNG rather than the SVG the printed ticket uses: Gmail and Outlook strip
+ * inline SVG, and a remote <img> would be blocked by most clients' image
+ * blocking on the way in. A data URI survives both, and costs about 2 KB.
+ */
+const qrBlock = (png, checkIn) =>
+  png
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr>
+         <td style="padding:16px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;text-align:center;">
+           <img src="${png}" width="150" height="150" alt="QR code for booking ${esc(checkIn)}"
+                style="display:block;width:150px;height:150px;image-rendering:pixelated;" />
+           <p style="margin:10px 0 0;font-size:11px;color:${MUTED};">Show this at the door</p>
+         </td></tr></table>`
+    : '';
+
 const seatWords = (seatNumber) => {
   const seats = Array.isArray(seatNumber) ? seatNumber : [seatNumber];
   return { seats, label: seats.length === 1 ? 'Seat' : `Seats (${seats.length})`, list: seats.join(', ') };
@@ -267,17 +285,21 @@ const seatWords = (seatNumber) => {
 async function sendBookingConfirmation({ to, name, concert, seatNumber, bookingReference }) {
   const { label, list, seats } = seatWords(seatNumber);
   const subject = `${env.appName}: ${bookingReference} — your ${seats.length === 1 ? 'seat is' : 'seats are'} reserved`;
+  const ticketUrl = `${env.appUrl}/api/bookings/mine/confirmation?reference=${encodeURIComponent(bookingReference)}`;
+
   const text =
     `Hello ${name},\n\nYour booking is confirmed.\n\n` +
     `Reference: ${bookingReference}\n${label}: ${list}\n` +
     (concert ? `Concert: ${concert.name}\nVenue: ${concert.venue}\n` : '') +
     `Booking fee: FREE\n\nShow the reference at the door and arrive 20 minutes early.\n\n` +
-    `Your printable ticket: ${env.appUrl}/api/bookings/mine/confirmation?reference=${encodeURIComponent(bookingReference)}`;
+    `Your printable ticket, with a QR code: ${ticketUrl}`;
+
+  const [png] = await Promise.all([qr.ticketPng(bookingReference, { width: 300 })]);
 
   const html = layout({
     heading: seats.length === 1 ? 'Your seat is reserved' : `Your ${seats.length} seats are reserved`,
     intro: `Hello ${esc(name)}, show this reference at the door. Everyone in your party comes in under it.`,
-    callout: codeBlock(bookingReference),
+    callout: codeBlock(bookingReference) + qrBlock(png, bookingReference),
     body:
       facts(
         [
@@ -286,11 +308,7 @@ async function sendBookingConfirmation({ to, name, concert, seatNumber, bookingR
           [label, list],
           ['Booking fee', 'FREE'],
         ].filter(Boolean),
-      ) +
-      button(
-        `${env.appUrl}/api/bookings/mine/confirmation?reference=${encodeURIComponent(bookingReference)}`,
-        'Download your ticket',
-      ),
+      ) + button(`${ticketUrl}&print=1`, 'Download your ticket (PDF)'),
     footer: 'Arrive 20 minutes early so stewards can seat you without rushing.',
   });
 
@@ -328,10 +346,12 @@ async function sendEventReminder({ to, name, concert, seatNumber, bookingReferen
     (concert ? `Venue: ${concert.venue}\n` : '') +
     `\nArrive 20 minutes early and show your reference at the door.`;
 
+  const png = await qr.ticketPng(bookingReference, { width: 300 });
+
   const html = layout({
     heading: `${esc(concert?.name || 'Your concert')} is coming up`,
     intro: `Hello ${esc(name)}, here is your reference again so you have it to hand.`,
-    callout: codeBlock(bookingReference),
+    callout: codeBlock(bookingReference) + qrBlock(png, bookingReference),
     body: facts(
       [concert ? ['Venue', concert.venue] : null, [label, list], ['Admission', 'Free']].filter(Boolean),
     ),

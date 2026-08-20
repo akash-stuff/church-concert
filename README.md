@@ -219,6 +219,76 @@ one per channel, and set a separate flag depending on which is entered.
 
 ---
 
+## Tickets, QR codes and the door
+
+A confirmed booking produces a ticket at
+`/api/bookings/mine/confirmation` (the attendee's own) or
+`/api/admin/bookings/:reference/ticket` (staff, for anybody). Both render the
+same document from `src/lib/ticket.js` — only the authorisation differs.
+
+Add `?print=1` and the page opens the print dialog on load. That is what every
+"Download ticket (PDF)" button points at: choose **Save as PDF** as the
+destination and you have a PDF. There is no headless browser and no PDF writer
+in this application, deliberately — a church booking site should not carry a
+150 MB Chromium download to produce four sides of A4.
+
+The ticket is laid out for A4, not for a screen. Three things follow from that
+and are easy to undo by accident:
+
+- **Artwork is in `<img>` tags, never CSS backgrounds.** Browsers do not print
+  background images unless the person ticks "Background graphics", and a ticket
+  that arrives at the printer with no branding is no good.
+- **`print-color-adjust: exact`** is what keeps the navy header navy. Without
+  it the header prints white and the gold rules disappear.
+- **The QR is inline SVG.** Vector, so the printer resamples it rather than
+  scaling screen pixels. A soft QR is a QR that will not scan.
+
+### What the QR contains
+
+A check-in URL — `{APP_URL}/checkin.html?ref=CHC-2026-00001` — not the bare
+reference. A steward scanning it with any phone camera lands on the page that
+tells them whether to admit; a bare string would just show them text they then
+have to type in somewhere.
+
+That page and its endpoint (`GET /api/admin/checkin`) are **behind
+requireAdmin**, which is the point: a QR printed on paper that anyone could
+photograph must not, on its own, reveal who is coming or what they hold. A
+steward signs in once on their phone and is returned to the ticket they scanned;
+a stranger scanning the same code gets the staff sign-in page and nothing else.
+
+The check-in verdict answers the question a steward actually has:
+
+| Verdict | Means |
+| --- | --- |
+| **Admit** | Live booking, and the concert is today |
+| **Cancelled** | The booking was cancelled and the seats released |
+| **Not for today** | Valid, but for a later date |
+| **Past concert** | The concert has already happened |
+| **Not found** | No booking has that reference |
+
+Each carries a glyph as well as a colour, because a steward may be
+colour-blind, or squinting at a dim phone in a porch.
+
+Error correction is level **Q** (~25% recoverable) rather than the default M.
+These get folded into coat pockets. The extra redundancy costs a slightly
+denser code and buys a scan that still works on creased paper — verified by
+decoding a code with a smudge over 22% of its middle.
+
+### Where the artwork comes from
+
+`assets/ticket-banner.svg` (the masthead strip) and `assets/ticket-crest.svg`
+are hand-drawn vector, and the confirmation page uses the same banner so the
+screen and the paper look like one document. Vector is not a compromise here —
+for print it beats a photograph, staying sharp at 300dpi and beyond for about
+3 KB.
+
+If you want real photographs instead, the poster upload in
+**Concerts → Edit → Poster** already accepts PNG, JPEG and WebP; drop images in
+there and concert cards use them. The ticket banner is a bundled file, so
+swapping it means replacing `assets/ticket-banner.svg`.
+
+---
+
 ## The staff console
 
 `/admin/` is a single page with a sidebar, eight panels and no router. Each

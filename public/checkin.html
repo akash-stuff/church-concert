@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Check in — Night of Worship</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body class="checkin-body">
+    <header class="checkin__bar">
+      <a class="checkin__brand" href="/admin/">
+        <img src="/assets/logo.svg" alt="" width="30" height="30" />
+        <span>
+          <strong>Night of Worship</strong>
+          <span>Door check-in</span>
+        </span>
+      </a>
+      <span class="chip chip--neutral" data-admin-chip>Checking…</span>
+    </header>
+
+    <main class="checkin">
+      <!-- The verdict fills this. Deliberately the first and largest thing on
+           the page: a steward reads it at arm's length in a badly lit porch. -->
+      <div class="verdict" data-verdict hidden></div>
+
+      <form class="checkin__form" id="checkin-form" novalidate>
+        <div class="field">
+          <label for="reference">Booking reference</label>
+          <span class="field__control field__control--inline">
+            <span class="field__icon" data-icon="ticket" aria-hidden="true"></span>
+            <input
+              id="reference"
+              name="reference"
+              type="text"
+              autocomplete="off"
+              autocapitalize="characters"
+              spellcheck="false"
+              placeholder="CHC-2026-00001"
+              required
+            />
+          </span>
+          <p class="field__hint">Scan the QR on a ticket, or type the reference by hand.</p>
+        </div>
+        <button class="btn btn--primary btn--block" type="submit">Check this ticket</button>
+      </form>
+
+      <div class="notice" data-notice role="status" aria-live="polite"></div>
+    </main>
+
+    <div class="toast-stack" data-toasts aria-live="polite"></div>
+
+    <script src="/js/core.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/checkin.js"></script>
+  </body>
+</html>

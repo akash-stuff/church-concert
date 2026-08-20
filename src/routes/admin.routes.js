@@ -1710,7 +1710,9 @@ router.get(
     const party = await bookingService.getBookingByReference(reference);
     if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
 
-    res.type('html').send(renderTicket(party, holder));
+    res.type('html').send(
+      await renderTicket(party, holder, { autoPrint: req.query.print === '1' }),
+    );
   }),
 );
 
@@ -1753,6 +1755,102 @@ router.post(
 
     if (!result.ok) throw badRequest(result.error, 'EMAIL_TEST_FAILED');
     res.json({ ok: true, message: `Test message sent to ${req.admin.email}.` });
+  }),
+);
+
+
+/**
+ * What a scanned ticket QR resolves to.
+ *
+ * Behind requireAdmin like everything else here, which is the point: a QR on a
+ * piece of paper anybody could photograph must not, on its own, reveal who is
+ * coming or what they hold. A steward signs in once on their phone; a stranger
+ * scanning the same code gets the staff sign-in page and nothing else.
+ */
+router.get(
+  '/checkin',
+  asyncRoute(async (req, res) => {
+    const reference = String(req.query.reference || '').trim();
+    if (!reference) throw badRequest('No booking reference given.', 'NO_REFERENCE');
+
+    const rows = await db.query(
+      `SELECT b.id, b.booking_reference, b.status, b.created_at, b.cancelled_at, b.cancel_reason,
+              s.seat_number, sec.name AS section_name,
+              u.full_name, u.whatsapp_verified,
+              c.id AS concert_id, c.name AS concert_name, c.event_date, c.start_time, c.venue
+         FROM bookings b
+         JOIN seats s ON s.id = b.seat_id
+         JOIN sections sec ON sec.id = s.section_id
+         JOIN users u ON u.id = b.user_id
+         JOIN concerts c ON c.id = b.concert_id
+        WHERE b.booking_reference = ?
+        ORDER BY s.display_order ASC, s.seat_number ASC`,
+      [reference],
+    );
+
+    if (!rows.length) {
+      return res.json({
+        found: false,
+        valid: false,
+        reference,
+        verdict: 'UNKNOWN',
+        message: 'No booking has that reference. Check the code and try again.',
+      });
+    }
+
+    const live = rows.filter((row) => row.status === 'PENDING' || row.status === 'CONFIRMED');
+    const first = rows[0];
+
+    // "Is it tonight?" is the question a steward is really asking, and a ticket
+    // for next month scans exactly like a ticket for tonight.
+    const eventDate = String(first.event_date).slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const whenVerdict = eventDate === today ? 'TODAY' : eventDate < today ? 'PAST' : 'FUTURE';
+
+    const valid = live.length > 0 && whenVerdict === 'TODAY';
+    const verdict = live.length === 0 ? 'CANCELLED' : whenVerdict === 'TODAY' ? 'ADMIT' : whenVerdict;
+
+    const message = {
+      ADMIT: `Admit ${live.length} ${live.length === 1 ? 'person' : 'people'}.`,
+      CANCELLED: 'This booking was cancelled. The seats have been released.',
+      FUTURE: 'Valid, but not for today — this ticket is for a later date.',
+      PAST: 'This ticket was for a concert that has already happened.',
+    }[verdict];
+
+    await audit(req, {
+      action: 'BOOKING_CHECKED_IN',
+      entityType: 'BOOKING',
+      entityId: first.id,
+      metadata: { reference, verdict },
+    });
+
+    return res.json({
+      found: true,
+      valid,
+      verdict,
+      message,
+      reference,
+      holder: first.full_name,
+      whatsapp_verified: Boolean(first.whatsapp_verified),
+      booked_at: first.created_at,
+      cancelled_at: first.cancelled_at,
+      cancel_reason: first.cancel_reason,
+      concert: {
+        id: first.concert_id,
+        name: first.concert_name,
+        event_date: first.event_date,
+        start_time: first.start_time,
+        venue: first.venue,
+        is_today: whenVerdict === 'TODAY',
+      },
+      seats: rows.map((row) => ({
+        seat_number: row.seat_number,
+        section_name: row.section_name,
+        status: row.status,
+      })),
+      live_seats: live.length,
+      total_seats: rows.length,
+    });
   }),
 );
 

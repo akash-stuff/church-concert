@@ -17,6 +17,22 @@
 
   document.title = `${concert.name} — details`;
   $('[data-concert-name]').textContent = concert.name;
+
+  // The concert's own poster if it has one, otherwise one of the bundled
+  // illustrations picked from its id — so a given concert always shows the same
+  // artwork rather than shuffling between reloads.
+  const POSTERS = [
+    '/assets/posters/choir-night.svg',
+    '/assets/posters/carols.svg',
+    '/assets/posters/strings.svg',
+    '/assets/posters/organ-recital.svg',
+    '/assets/posters/gospel-evening.svg',
+  ];
+  const poster = $('[data-concert-poster]');
+  if (poster) {
+    poster.src = concert.poster_path || POSTERS[(Number(concert.id) || 0) % POSTERS.length];
+    poster.alt = `Artwork for ${concert.name}`;
+  }
   $('[data-concert-description]').textContent =
     concert.description || 'Details for this concert are being finalised.';
 

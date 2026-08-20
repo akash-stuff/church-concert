@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" preserveAspectRatio="xMidYMid slice" role="img" aria-label="A church nave at candlelight, seen down the centre aisle">
+  <defs>
+    <linearGradient id="tb-air" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1322"/>
+      <stop offset="0.5" stop-color="#16233d"/>
+      <stop offset="1" stop-color="#22345a"/>
+    </linearGradient>
+    <linearGradient id="tb-glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6e6c2" stop-opacity=".95"/>
+      <stop offset="0.6" stop-color="#e0ac4c" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#b58328" stop-opacity=".25"/>
+    </linearGradient>
+    <linearGradient id="tb-beam" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#f6e6c2" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#f6e6c2" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="tb-halo" cx="0.5" cy="0.35" r="0.55">
+      <stop offset="0" stop-color="#f3d69a" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#f3d69a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#tb-air)"/>
+  <ellipse cx="600" cy="120" rx="520" ry="200" fill="url(#tb-halo)"/>
+
+  <!-- Arcade, receding to the chancel. Drawn wide so the strip crops well. -->
+  <g fill="none" stroke="#2c4066" stroke-width="7" opacity=".65">
+    <path d="M40 300V150a110 110 0 01220 0v150"/>
+    <path d="M940 300V150a110 110 0 01220 0v150"/>
+  </g>
+  <g fill="none" stroke="#35496f" stroke-width="6" opacity=".5">
+    <path d="M250 300V165a92 92 0 01184 0v135"/>
+    <path d="M766 300V165a92 92 0 01184 0v135"/>
+  </g>
+
+  <!-- The east window. -->
+  <g>
+    <path d="M600 26c62 0 112 50 112 112v130H488V138c0-62 50-112 112-112z" fill="#0b1322"/>
+    <path d="M600 44c52 0 94 42 94 94v112H506V138c0-52 42-94 94-94z" fill="url(#tb-glass)"/>
+    <g stroke="#0b1322" stroke-width="5" opacity=".7">
+      <path d="M600 44v206M506 130h188M506 196h188M553 52v198M647 52v198"/>
+    </g>
+  </g>
+
+  <!-- Light falling down the aisle. -->
+  <path d="M506 250h188l150 50H356z" fill="url(#tb-beam)"/>
+
+  <!-- Cross, small, in the light. -->
+  <path d="M592 116h16v44h30v16h-30v78h-16v-78h-30v-16h30z" fill="#fbf1dc" opacity=".9"/>
+
+  <!-- Pews, in silhouette, either side of the aisle. -->
+  <g fill="#0b1322" opacity=".9">
+    <rect x="150" y="238" width="300" height="14" rx="5"/>
+    <rect x="750" y="238" width="300" height="14" rx="5"/>
+    <rect x="110" y="262" width="330" height="15" rx="5"/>
+    <rect x="760" y="262" width="330" height="15" rx="5"/>
+    <rect x="60" y="286" width="370" height="16" rx="5"/>
+    <rect x="770" y="286" width="370" height="16" rx="5"/>
+  </g>
+
+  <!-- Candles down the aisle edge, the only warm points below the window. -->
+  <g fill="#e0ac4c">
+    <circle cx="470" cy="232" r="4"/><circle cx="730" cy="232" r="4"/>
+    <circle cx="458" cy="257" r="4.5"/><circle cx="742" cy="257" r="4.5"/>
+    <circle cx="444" cy="282" r="5"/><circle cx="756" cy="282" r="5"/>
+  </g>
+</svg>
