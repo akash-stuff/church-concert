@@ -198,6 +198,7 @@ async function createBooking({
   source = 'USER',
   adminId = null,
   note = null,
+  guests = null,
 }) {
   const requested = [...new Set((seatIds || []).map(Number))].filter((id) => Number.isInteger(id) && id > 0);
 
@@ -210,6 +211,13 @@ async function createBooking({
   }
   // Ascending id order is what makes concurrent multi-seat requests safe.
   requested.sort((a, b) => a - b);
+
+  /* Keyed by seat id, because of the sort immediately above: the order the
+     client sent its seats in is not the order they are written, so pairing
+     guests to seats by array index would attach people to the wrong chairs. */
+  const guestBySeat = new Map(
+    (guests || []).map((guest) => [Number(guest.seat_id), guest]),
+  );
 
   return db.transaction(async (conn) => {
     // The capacity mutex, and the source of truth for the ceiling. See db.js on
@@ -336,13 +344,36 @@ async function createBooking({
     const bookingIds = [];
 
     for (const seat of seats) {
+      /* Whose seat this is. Falling back to the account holder rather than
+         leaving the row blank: every seat must name somebody, or the door list
+         and the hand bands have nothing to print. A single-seat booking with no
+         guest details given is exactly the old behaviour — the booker. */
+      const guest = guestBySeat.get(seat.id);
+      const guestName = guest?.name || user.full_name;
+      const guestEmail = guest?.email ?? user.email;
+      const guestPhone = guest?.phone ?? user.whatsapp_number;
+      const guestAge = guest?.age ?? null;
+
       try {
         const [result] = await conn.execute(
           `INSERT INTO bookings
              (booking_reference, concert_id, user_id, seat_id, status, source,
-              created_by_admin_id, confirmed_at, note)
-           VALUES (?, ?, ?, ?, 'CONFIRMED', ?, ?, NOW(), ?)`,
-          [reference, concert.id, userId, seat.id, source, adminId, note],
+              created_by_admin_id, confirmed_at, note,
+              guest_name, guest_email, guest_phone, guest_age)
+           VALUES (?, ?, ?, ?, 'CONFIRMED', ?, ?, NOW(), ?, ?, ?, ?, ?)`,
+          [
+            reference,
+            concert.id,
+            userId,
+            seat.id,
+            source,
+            adminId,
+            note,
+            guestName,
+            guestEmail,
+            guestPhone,
+            guestAge,
+          ],
         );
         bookingIds.push(result.insertId);
       } catch (err) {
@@ -553,6 +584,7 @@ async function getUserBookings(userId, { concertId = null } = {}) {
   const rows = await db.query(
     `SELECT b.id, b.booking_reference, b.status, b.created_at AS booked_at, b.confirmed_at,
             b.source, b.concert_id,
+            b.guest_name, b.guest_email, b.guest_phone, b.guest_age,
             s.id AS seat_id, s.seat_number, sec.name AS section_name,
             c.name AS concert_name, c.event_date, c.start_time, c.end_time,
             c.venue, c.address
@@ -590,6 +622,12 @@ async function getUserBookings(userId, { concertId = null } = {}) {
       seat_id: row.seat_id,
       seat_number: row.seat_number,
       section_name: row.section_name,
+      // Who is in this particular seat. Backfilled to the account holder for
+      // bookings made before guest details existed (migration 006).
+      guest_name: row.guest_name,
+      guest_email: row.guest_email,
+      guest_phone: row.guest_phone,
+      guest_age: row.guest_age,
     });
   }
 

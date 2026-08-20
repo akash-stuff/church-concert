@@ -165,14 +165,18 @@
     if (actions.length) {
       const foot = el('footer', { class: 'drawer__foot' });
       for (const action of actions) {
-        foot.append(
-          el('button', {
-            type: 'button',
-            class: `btn btn--small ${action.variant ? `btn--${action.variant}` : 'btn--ghost'}`,
-            text: action.label,
-            onClick: () => action.onClick({ close: closeDrawer, body }),
-          }),
+        // The handler is handed its own button so it can show a spinner on the
+        // control that was actually pressed. Without it a slow action leaves the
+        // drawer looking inert, which reads as the app having hung.
+        const button = el('button', {
+          type: 'button',
+          class: `btn btn--small ${action.variant ? `btn--${action.variant}` : 'btn--ghost'}`,
+          text: action.label,
+        });
+        button.addEventListener('click', () =>
+          action.onClick({ close: closeDrawer, body, button }),
         );
+        foot.append(button);
       }
       panel.append(foot);
     }
@@ -241,6 +245,109 @@
       document.body.append(scrim, dialog);
       scrim.addEventListener('click', () => finish(false));
       release = trapFocus(dialog, () => finish(false));
+    });
+  }
+
+  /**
+   * confirm(), plus one field. Resolves the trimmed value, or null if the
+   * person backed out — so a caller can treat "cancelled" and "left it empty"
+   * identically, which is what every caller wants.
+   *
+   * Pass `options` ([{value, label}]) for a select instead of a text input. Both
+   * shapes live in one function because the surrounding furniture — scrim, focus
+   * trap, Escape, Enter-to-submit, the two buttons — is the whole cost of a
+   * dialog, and it is identical either way.
+   *
+   * Not window.prompt: that one is styled by the browser, cannot mask a
+   * password, offers no select at all, and is blocked outright in some embedded
+   * webviews.
+   */
+  function prompt({
+    title,
+    message,
+    label,
+    type = 'text',
+    value = '',
+    options = null,
+    confirmLabel = 'Save',
+    cancelLabel = 'Cancel',
+  }) {
+    return new Promise((resolve) => {
+      const scrim = el('div', { class: 'scrim' });
+      let release = () => {};
+
+      const input = options
+        ? el(
+            'select',
+            { id: 'cc-prompt-input' },
+            options.map((option) =>
+              el('option', {
+                value: option.value,
+                text: option.label,
+                selected: option.value === value ? true : null,
+              }),
+            ),
+          )
+        : el('input', {
+            id: 'cc-prompt-input',
+            type,
+            value,
+            autocomplete: type === 'password' ? 'new-password' : 'off',
+            required: true,
+          });
+
+      const finish = (answer) => {
+        release();
+        scrim.remove();
+        dialog.remove();
+        resolve(answer);
+      };
+
+      const submit = () => {
+        const entered = input.value.trim();
+        finish(entered || null);
+      };
+
+      const dialog = el(
+        'div',
+        { class: 'dialog', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' },
+        [
+          el('h2', { text: title }),
+          message ? el('p', { text: message }) : null,
+          el('div', { class: 'field' }, [
+            el('label', { for: 'cc-prompt-input', text: label }),
+            options ? input : el('span', { class: 'field__control field__control--inline' }, [input]),
+          ]),
+          el('div', { class: 'dialog__actions' }, [
+            el('button', {
+              type: 'button',
+              class: 'btn btn--ghost btn--small',
+              text: cancelLabel,
+              onClick: () => finish(null),
+            }),
+            el('button', {
+              type: 'button',
+              class: 'btn btn--primary btn--small',
+              text: confirmLabel,
+              onClick: submit,
+            }),
+          ]),
+        ],
+      );
+
+      // Enter submits, because a one-field dialog that needs a mouse to accept
+      // it is an odd thing to hand somebody.
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        }
+      });
+
+      document.body.append(scrim, dialog);
+      scrim.addEventListener('click', () => finish(null));
+      release = trapFocus(dialog, () => finish(null));
+      input.focus();
     });
   }
 
@@ -526,6 +633,7 @@
     drawer,
     closeDrawer,
     confirm,
+    prompt,
     skeleton,
     empty,
     failure,

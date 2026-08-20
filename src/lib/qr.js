@@ -35,15 +35,22 @@ function checkInUrl(reference) {
   return `${env.appUrl}/checkin.html?ref=${encodeURIComponent(reference)}`;
 }
 
-/** Inline SVG markup, sized in CSS by the caller. */
-async function ticketSvg(reference) {
+/**
+ * Inline SVG markup, sized in CSS by the caller.
+ *
+ * `dark` overrides the module colour. Hand bands use it: a band is printed in
+ * violet or teal, and a code in the site's navy on a coloured strip has nowhere
+ * near the contrast a phone camera needs. The caller passes the darkest ink in
+ * its own palette instead.
+ */
+async function ticketSvg(reference, { dark = '#16233d' } = {}) {
   try {
     return await QRCode.toString(checkInUrl(reference), {
       type: 'svg',
       errorCorrectionLevel: LEVEL,
       margin: 0,
       // The SVG has no intrinsic size so the ticket's CSS decides how big it is.
-      color: { dark: '#16233dff', light: '#ffffffff' },
+      color: { dark: `${dark}ff`, light: '#ffffffff' },
     });
   } catch (error) {
     console.error('[qr] could not render SVG:', error.message);

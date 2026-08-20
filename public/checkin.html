@@ -10,20 +10,30 @@
   </head>
   <body class="checkin-body">
     <header class="checkin__bar">
-      <a class="checkin__brand" href="/admin/">
-        <img src="/assets/logo.svg" alt="" width="30" height="30" />
-        <span>
-          <strong>Night of Worship</strong>
-          <span>Door check-in</span>
-        </span>
-      </a>
-      <span class="chip chip--neutral" data-admin-chip>Checking…</span>
+      <!-- The inner wrapper is what shares a width with the cards below, so the
+           brand and the signed-in chip line up with the column rather than with
+           the window edges. Without it the bar is full-bleed and the header
+           reads as belonging to a different page than the content. -->
+      <div class="checkin__bar-inner">
+        <a class="checkin__brand" href="/admin/">
+          <img src="/assets/logo.svg" alt="" width="30" height="30" />
+          <span class="checkin__brand-text">
+            <strong>Night of Worship</strong>
+            <span>Door check-in</span>
+          </span>
+        </a>
+        <span class="chip chip--neutral" data-admin-chip>Checking…</span>
+      </div>
     </header>
 
     <main class="checkin">
       <!-- The verdict fills this. Deliberately the first and largest thing on
            the page: a steward reads it at arm's length in a badly lit porch. -->
       <div class="verdict" data-verdict hidden></div>
+
+      <!-- Errors sit here rather than below the form, so every answer this page
+           gives — verdict or failure — appears in the same place. -->
+      <div class="notice" data-notice role="status" aria-live="polite"></div>
 
       <form class="checkin__form" id="checkin-form" novalidate>
         <div class="field">
@@ -45,8 +55,6 @@
         </div>
         <button class="btn btn--primary btn--block" type="submit">Check this ticket</button>
       </form>
-
-      <div class="notice" data-notice role="status" aria-live="polite"></div>
     </main>
 
     <div class="toast-stack" data-toasts aria-live="polite"></div>

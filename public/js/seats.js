@@ -1,8 +1,9 @@
 'use strict';
 
 (async function initSeats() {
-  const { api, $, el, notify, clearNotice, busy, renderSeatMap, mountHeader, requireSession } =
+  const { api, $, el, notify, clearNotice, busy, renderSeatMap, mountHeader, requireSession, showFieldErrors } =
     window.CC;
+  const UI = window.UI;
 
   const session = await mountHeader('/seats.html');
   if (!requireSession(session, '/seats.html')) return;
@@ -203,6 +204,172 @@
     }
   }
 
+  // --- Who is sitting where -------------------------------------------------
+
+  /**
+   * One block of fields per chosen seat.
+   *
+   * A booking is one row per seat, and until now every one of those rows carried
+   * the booker's name — so a family of four appeared on the door list as one
+   * person four times over, and a steward had no way to tell who should be in
+   * which chair. Each seat now names its own guest.
+   *
+   * The first seat is prefilled from the account, because the person booking is
+   * almost always one of the people coming, and making them retype their own
+   * details to book their own seat is the kind of friction that gets a booking
+   * abandoned. Every field stays editable: sometimes you book for other people
+   * and are not coming yourself.
+   */
+  function guestFields(seat, index, user) {
+    const id = (name) => `guest_${seat.id}_${name}`;
+    const mine = index === 0;
+
+    const field = (name, label, type, value, { hint = null, required = true } = {}) =>
+      el('div', { class: 'field' }, [
+        el('label', { for: id(name), text: label }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('input', {
+            id: id(name),
+            name: `${seat.id}:${name}`,
+            type,
+            value: value || '',
+            autocomplete: 'off',
+            required: required ? true : null,
+          }),
+        ]),
+        hint ? el('p', { class: 'field__hint', text: hint }) : null,
+        el('span', { class: 'field__error', 'data-error-for': `${seat.id}:${name}` }),
+      ]);
+
+    return el('fieldset', { class: 'guest-card' }, [
+      el('legend', { class: 'guest-card__legend' }, [
+        el('b', { text: seat.seat_number }),
+        el('span', { text: seat.section_name || '' }),
+        mine ? el('i', { class: 'chip chip--gold', text: 'You' }) : null,
+      ]),
+      field('name', 'Full name', 'text', mine ? user.full_name : ''),
+      field('email', 'Email', 'email', mine ? user.email : ''),
+      field('phone', 'Phone', 'tel', mine ? user.whatsapp_number || user.mobile_number : '', {
+        hint: 'With country code, for example +919876543210.',
+      }),
+      field('age', 'Age', 'number', '', {
+        required: false,
+        hint: 'Only needed if this guest is under 18.',
+      }),
+    ]);
+  }
+
+  /**
+   * Collect guest details, then book. Resolves once the booking is made, or not
+   * at all if the person closes the panel.
+   *
+   * The panel is where errors land too: a validation failure has to be shown
+   * against the field that caused it, which means the form must still be on
+   * screen when the server answers. So it stays open until the booking succeeds.
+   */
+  function collectGuests(user) {
+    const seats = [...chosen.values()];
+    const form = el('form', { class: 'guest-form' }, [
+      el('p', { class: 'guest-form__lede' }, [
+        el('span', {
+          text:
+            seats.length === 1
+              ? 'Tell us who is coming, so stewards can greet them by name at the door.'
+              : `Tell us who is sitting in each of the ${seats.length} seats. Each guest gets their own wristband at the door.`,
+        }),
+      ]),
+      ...seats.map((seat, index) => guestFields(seat, index, user)),
+    ]);
+
+    /** DOM field names are "<seatId>:<field>", so they regroup by seat. */
+    const readGuests = () => {
+      const bySeat = new Map(seats.map((seat) => [seat.id, { seat_id: seat.id }]));
+      for (const input of form.querySelectorAll('input[name]')) {
+        const [rawSeat, key] = input.name.split(':');
+        const guest = bySeat.get(Number(rawSeat));
+        if (guest) guest[key] = input.value.trim();
+      }
+      return [...bySeat.values()];
+    };
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      UI.drawer({
+        title: seats.length === 1 ? 'Who is coming?' : 'Who is coming?',
+        subtitle:
+          seats.length === 1
+            ? 'One seat'
+            : `${seats.length} seats · ${seats.map((s) => s.seat_number).join(', ')}`,
+        render: (body) => body.append(form),
+        onClose: () => {
+          if (!settled) resolve(null);
+        },
+        actions: [
+          { label: 'Back to the map', onClick: ({ close }) => close() },
+          {
+            label: 'Confirm booking',
+            variant: 'primary',
+            onClick: async ({ close, button }) => {
+              showFieldErrors(form, {});
+              busy(button, true, 'Confirming…');
+              try {
+                const result = await api('/api/bookings', {
+                  method: 'POST',
+                  body: { concert_id: concertId, guests: readGuests() },
+                });
+                settled = true;
+                close();
+                resolve(result);
+              } catch (error) {
+                busy(button, false);
+                paintGuestErrors(form, error, seats);
+                UI.toastError('Could not confirm the booking', error.message);
+
+                // Somebody else got there first: the panel is useless now, so
+                // close it and let the map reload underneath.
+                if (
+                  ['SEAT_TAKEN', 'FULLY_BOOKED', 'NOT_ENOUGH_CAPACITY', 'SEAT_RESERVED', 'SEAT_DISABLED'].includes(
+                    error.code,
+                  )
+                ) {
+                  settled = true;
+                  close();
+                  resolve({ failed: error });
+                }
+              }
+            },
+          },
+        ],
+      });
+    });
+  }
+
+  /**
+   * Map server field errors onto the form.
+   *
+   * The server reports them as `guests.0.email`, indexed by position in the
+   * array that was sent, whereas the inputs are keyed by seat id. This walks
+   * that back through the same ordering used to build the request.
+   */
+  function paintGuestErrors(form, error, seats) {
+    if (!error.details) return;
+    const details = {};
+    for (const [key, message] of Object.entries(error.details)) {
+      const match = /^guests\.(\d+)\.(\w+)$/.exec(key);
+      if (match) {
+        const seat = seats[Number(match[1])];
+        if (seat) details[`${seat.id}:${match[2]}`] = message;
+      } else {
+        details[key] = message;
+      }
+    }
+    showFieldErrors(form, details);
+
+    const first = form.querySelector('[data-error-for]:not(:empty)');
+    if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   // --- Confirm --------------------------------------------------------------
   $('[data-clear]').addEventListener('click', clearSelection);
 
@@ -210,13 +377,26 @@
     if (!chosen.size) return;
     clearNotice('[data-notice]');
     const button = event.currentTarget;
-    busy(button, true, 'Confirming…');
+    busy(button, true, 'Just a moment…');
+
+    let result;
+    try {
+      result = await collectGuests(session.user);
+    } finally {
+      busy(button, false);
+    }
+
+    // Panel closed without booking.
+    if (!result) return;
+
+    // Booked, but the seats went first — reload the map and let them try again.
+    if (result.failed) {
+      notify('[data-notice]', result.failed.message, 'error');
+      await load({ keepNotice: true });
+      return;
+    }
 
     try {
-      const result = await api('/api/bookings', {
-        method: 'POST',
-        body: { concert_id: concertId, seat_ids: [...chosen.keys()] },
-      });
 
       sessionStorage.setItem(
         'cc_last_booking',
@@ -229,28 +409,10 @@
       );
       window.location.href = '/confirmed.html';
     } catch (error) {
-      busy(button, false);
-      notify('[data-notice]', error.message, 'error');
-
-      // Someone else got there first, or the last places went: reload so the
-      // plan matches reality before the next attempt.
-      if (
-        [
-          'SEAT_TAKEN',
-          'FULLY_BOOKED',
-          'NOT_ENOUGH_CAPACITY',
-          'SEAT_RESERVED',
-          'SEAT_DISABLED',
-          'PER_PERSON_LIMIT',
-        ].includes(error.code)
-      ) {
-        await load({ keepNotice: true });
-      }
-      if (error.code === 'WHATSAPP_NOT_VERIFIED') {
-        setTimeout(() => {
-          window.location.href = '/verify.html';
-        }, 1500);
-      }
+      // Only a failure to stash the summary and navigate can land here; the
+      // booking itself already succeeded, so send them on regardless rather
+      // than leaving them on a map that no longer reflects their seats.
+      window.location.href = '/confirmed.html';
     }
   });
 

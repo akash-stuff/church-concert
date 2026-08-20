@@ -720,10 +720,18 @@ fieldset legend {
   display: none;
 }
 .notice--error {
-  border-color: #fecaca;
-  border-left-color: var(--danger);
-  background: var(--danger-wash);
-  color: #991b1b;
+  border-color: var(--danger);
+  /* A darker left rule so the accent still reads against the solid fill. */
+  border-left-color: #991b1b;
+  background: var(--danger);
+  color: #fff;
+}
+/* Links and strong text inside a solid-red notice have to come along, or they
+   keep their own colour and disappear into the background. */
+.notice--error a,
+.notice--error strong,
+.notice--error code {
+  color: #fff;
 }
 .notice--success {
   border-color: #bbf7d0;
@@ -759,10 +767,14 @@ fieldset legend {
   background: var(--warn-wash);
   border-color: #fde68a;
 }
+/* Red labels are solid red with white text, everywhere, on both panels.
+   A pale wash with dark red text is legible but reads as "note"; these labels
+   mean cancelled, disabled, failed or rejected, and they should carry the same
+   weight wherever they appear. See also .chip--off and .notice--error. */
 .pill--off {
-  color: #991b1b;
-  background: var(--danger-wash);
-  border-color: #fecaca;
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
 }
 .pill--neutral {
   color: var(--muted);
@@ -3511,8 +3523,8 @@ input[type='search'] {
   content: '▲';
 }
 .kpi__delta--down {
-  background: var(--danger-wash);
-  color: var(--danger);
+  background: var(--danger);
+  color: #fff;
 }
 .kpi__delta--down::before {
   content: '▼';
@@ -3580,9 +3592,9 @@ input[type='search'] {
   border-radius: 1px;
 }
 .chip--off {
-  background: var(--danger-wash);
-  border-color: var(--danger-line);
-  color: var(--danger);
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 .chip--off::before {
   border-radius: 1px;
@@ -5443,6 +5455,71 @@ input[type='search'] {
   vertical-align: middle;
 }
 
+/* --- Guest details, one block per seat -------------------------------------
+   Shown in a drawer after seats are chosen. A fieldset per seat, because these
+   really are separate groups of fields about separate people and screen readers
+   should announce them that way.
+   ------------------------------------------------------------------------- */
+
+.guest-form__lede {
+  margin: 0 0 var(--space-5);
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.guest-card {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.guest-card:last-of-type {
+  margin-bottom: 0;
+}
+.guest-card__legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+}
+.guest-card__legend b {
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  color: var(--brand);
+}
+.guest-card__legend span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.guest-card__legend i {
+  font-style: normal;
+}
+/* Fields inside a guest block sit closer together than page-level fields: the
+   block is already a visual group, so the default rhythm reads as too loose. */
+.guest-card .field + .field {
+  margin-top: var(--space-3);
+}
+
+@media (min-width: 40rem) {
+  /* Name takes the full width; the shorter three pair up underneath it. */
+  .guest-card {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3) var(--space-4);
+  }
+  .guest-card__legend {
+    grid-column: 1 / -1;
+  }
+  .guest-card .field:first-of-type {
+    grid-column: 1 / -1;
+  }
+  .guest-card .field + .field {
+    margin-top: 0;
+  }
+}
+
 /* --- Door check-in ---------------------------------------------------------
    Read at arm's length, in a porch, on a phone, by somebody holding a torch in
    the other hand. The verdict is the biggest thing on the page and carries a
@@ -5453,25 +5530,43 @@ input[type='search'] {
 .checkin-body {
   background: var(--page);
   min-height: 100vh;
+  /* One column width for the whole screen. The bar's contents and every card
+     below it derive their edges from this, so the brand, the verdict and the
+     form share a left edge at any window size — which is the only thing
+     holding a page this sparse together. */
+  --checkin-col: 34rem;
 }
 .checkin__bar {
+  padding: var(--space-3) 0;
+  background: var(--gradient-brand);
+  color: #fff;
+}
+/* The horizontal inset lives on the inner wrapper, not on the bar, so it is the
+   same inset .checkin applies to its own children. That is what puts the brand
+   on the exact left edge of the verdict card rather than 16px outside it. */
+.checkin__bar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--gradient-brand);
-  color: #fff;
+  max-width: var(--checkin-col);
+  margin: 0 auto;
+  padding: 0 var(--space-4);
 }
 .checkin__brand {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
   color: #fff;
   text-decoration: none;
 }
 .checkin__brand img {
+  flex: none;
   border-radius: 9px;
+}
+.checkin__brand-text {
+  min-width: 0;
 }
 .checkin__brand strong {
   display: block;
@@ -5479,14 +5574,25 @@ input[type='search'] {
   font-size: 0.9375rem;
   line-height: 1.2;
 }
-.checkin__brand span span {
+.checkin__brand-text span {
+  display: block;
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent-light);
 }
+/* The chip carries a person's full name, which can be longer than the space
+   there is for it. Truncating beats pushing the brand off the bar. */
+.checkin__bar-inner .chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .checkin {
-  max-width: 34rem;
+  max-width: var(--checkin-col);
   margin: 0 auto;
   padding: var(--space-5) var(--space-4) var(--space-8);
 }
@@ -5594,6 +5700,138 @@ input[type='search'] {
   font-style: normal;
   font-size: 0.625rem;
   color: var(--muted);
+}
+/* The guest's name, and an age badge when the guest is a minor. Both clipped:
+   the chip sits in a wrapping row and must keep its shape. */
+.verdict__seat u {
+  max-width: 7rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verdict__seat em {
+  margin-top: 0.15rem;
+  padding: 0 0.3rem;
+  border-radius: var(--radius-pill);
+  background: var(--warn);
+  color: #fff;
+  font-style: normal;
+  font-size: 0.5625rem;
+  font-weight: 700;
+}
+
+/* The actions row is appended last by checkin.js, after whichever of the facts,
+   the seat strip and the band panel were relevant. Spacing it here rather than
+   there keeps the separation right whichever of them came before it. */
+.verdict__actions {
+  margin-top: var(--space-4);
+}
+
+/* --- Issuing a hand band -------------------------------------------------
+   Only rendered on an ADMIT verdict. Set apart from the verdict above it with
+   a rule and a lighter ground, because it is a different kind of thing: the
+   verdict is information, this is an action with a printer on the end of it.
+   ---------------------------------------------------------------------- */
+.band-issue {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 2px dashed var(--line);
+  text-align: left;
+}
+.band-issue__title {
+  margin: 0;
+  font-size: 1.0625rem;
+}
+.band-issue__lede {
+  margin: var(--space-1) 0 var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.band-issue__hint {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.band-issue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.band-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+/* Big enough to hit with a thumb on a phone in a porch — 2.25rem is above the
+   44px touch target once the ring is counted. */
+.band-picker__swatch {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--swatch, var(--brand));
+  cursor: pointer;
+}
+.band-picker__swatch[aria-checked='true'] {
+  /* A ring rather than a colour change: the swatch has to keep showing the
+     colour it stands for, so selection is signalled around it. */
+  border-color: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--ink),
+    0 2px 6px -2px rgba(15, 23, 42, 0.5);
+}
+.band-picker__swatch:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.band-guests {
+  display: grid;
+  gap: var(--space-2);
+}
+.band-guests__one {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.band-guests__one:hover {
+  border-color: var(--brand);
+  background: var(--wash);
+}
+.band-guests__one b {
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  color: var(--brand);
+}
+.band-guests__one span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.band-guests__one i {
+  font-style: normal;
+  flex: none;
 }
 
 .verdict[data-tone='ok'] {

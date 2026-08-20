@@ -8,17 +8,21 @@ const notifications = require('../services/notifications');
 const feed = require('../services/console-feed');
 const emailService = require('../services/email');
 const { renderTicket } = require('../lib/ticket');
+const handBand = require('../lib/hand-band');
 const fs = require('fs/promises');
 const path = require('path');
 const { audit, getSettings, setSettings } = require('../lib/audit');
+const exports_ = require('../lib/exports');
 const {
   asyncRoute,
   badRequest,
   notFound,
   conflict,
+  forbidden,
   ageOn,
   maskPhone,
   randomToken,
+  hashPassword,
 } = require('../lib/helpers');
 const schemas = require('../lib/schemas');
 const { parse } = schemas;
@@ -28,6 +32,41 @@ const router = express.Router();
 
 // Every route in this file requires an admin session.
 router.use(auth.requireAdmin);
+
+/**
+ * What a STAFF login is allowed to reach.
+ *
+ * A door steward needs to answer one question — is this ticket good — and print
+ * a replacement if it is. Everything else in this file (cancelling bookings,
+ * editing concerts, exporting the attendee list, reading the audit log) is a
+ * great deal of authority to hand somebody for one evening, so the STAFF role
+ * gets an allowlist rather than a denylist. A denylist would quietly grant every
+ * endpoint added after it was written, which is the wrong default for a role
+ * that exists precisely to be narrow.
+ *
+ * Paths are matched relative to the router's mount point (/api/admin), which is
+ * what req.path is inside a mounted router.
+ */
+const STAFF_ALLOWED = [
+  /^\/me$/,
+  /^\/checkin$/,
+  /^\/band-colours$/,
+  /^\/bookings\/[^/]+\/(ticket|band)$/,
+];
+
+router.use((req, res, next) => {
+  if (req.admin.role !== 'STAFF') return next();
+  // GET only: nothing a steward does changes state, and the check-in endpoint
+  // writes its own audit row without needing a writable method.
+  const allowed = req.method === 'GET' && STAFF_ALLOWED.some((rule) => rule.test(req.path));
+  if (allowed) return next();
+  return next(
+    forbidden(
+      'This login is for door check-in only. Ask an administrator if you need more.',
+      'STAFF_SCOPE',
+    ),
+  );
+});
 
 /**
  * Which concert an admin request is about.
@@ -269,8 +308,13 @@ router.get(
 
     if (req.query.search) {
       const term = `%${String(req.query.search).trim()}%`;
-      where.push('(b.booking_reference LIKE ? OR u.full_name LIKE ? OR u.email LIKE ? OR s.seat_number LIKE ?)');
-      params.push(term, term, term, term);
+      // guest_name is searched as well as the account holder's: staff are
+      // usually given the name of the person standing in front of them, who is
+      // often not whoever made the booking.
+      where.push(
+        '(b.booking_reference LIKE ? OR u.full_name LIKE ? OR u.email LIKE ? OR s.seat_number LIKE ? OR b.guest_name LIKE ? OR b.guest_email LIKE ?)',
+      );
+      params.push(term, term, term, term, term, term);
     }
     if (req.query.status) {
       where.push('b.status = ?');
@@ -291,6 +335,7 @@ router.get(
     const rows = await db.query(
       `SELECT b.id, b.booking_reference, b.status, b.source, b.created_at, b.confirmed_at,
               b.cancelled_at, b.cancelled_by, b.cancel_reason, b.note,
+              b.guest_name, b.guest_email, b.guest_phone, b.guest_age,
               b.concert_id, c.name AS concert_name,
               s.id AS seat_id, s.seat_number, sec.name AS section_name,
               u.id AS user_id, u.full_name, u.email, u.whatsapp_number, u.whatsapp_verified
@@ -332,6 +377,7 @@ router.post(
       source: 'ADMIN',
       adminId: req.admin.id,
       note: data.note ?? 'Created by admin',
+      guests: data.guests,
     });
 
     const seatNumbers = result.seats.map((seat) => seat.seat_number);
@@ -568,36 +614,92 @@ router.post(
 
     const concert = await resolveConcert(req);
     const pad = data.pad ?? 2;
+    const rowLabel = data.row_label ?? (data.prefix || null);
 
-    const created = [];
-    const skipped = [];
+    const wanted = [];
     for (let n = data.from; n <= data.to; n += 1) {
-      const seatNumber = `${data.prefix}${String(n).padStart(pad, '0')}`;
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        await db.query(
-          `INSERT INTO seats (concert_id, section_id, seat_number, row_label, display_order)
-           VALUES (?, ?, ?, ?, ?)`,
-          [concert.id, data.section_id, seatNumber, data.row_label ?? (data.prefix || null), n],
-        );
-        created.push(seatNumber);
-      } catch (err) {
-        if (db.isDuplicateKey(err)) skipped.push(seatNumber);
-        else throw err;
-      }
+      wanted.push({ seatNumber: `${data.prefix}${String(n).padStart(pad, '0')}`, order: n });
     }
+
+    /**
+     * Why this is batched rather than a loop of single INSERTs.
+     *
+     * It used to insert one row per round trip. Against a database on the far
+     * side of a network — which is the normal deployment — a 500-seat run meant
+     * 500 sequential round trips, so laying out an auditorium took the better
+     * part of a minute with the console apparently hung. The work was never the
+     * problem; the latency was, 500 times over.
+     *
+     * Now: one SELECT to find what already exists, then INSERTs of 200 rows at
+     * a time. A 500-seat run is four round trips instead of five hundred.
+     *
+     * INSERT IGNORE rather than a plain INSERT even though the existence check
+     * above should have caught duplicates: two admins laying out the same
+     * section at once would both pass the check, and the second must skip the
+     * collision rather than abort a batch of 200 that is otherwise fine.
+     */
+    const numbers = wanted.map((row) => row.seatNumber);
+    const placeholders = numbers.map(() => '?').join(', ');
+    const existingRows = await db.query(
+      `SELECT seat_number FROM seats WHERE concert_id = ? AND seat_number IN (${placeholders})`,
+      [concert.id, ...numbers],
+    );
+    const existing = new Set(existingRows.map((row) => row.seat_number));
+
+    const toCreate = wanted.filter((row) => !existing.has(row.seatNumber));
+    const skipped = numbers.filter((number) => existing.has(number));
+
+    const BATCH = 200;
+    let inserted = 0;
+    for (let i = 0; i < toCreate.length; i += BATCH) {
+      const batch = toCreate.slice(i, i + BATCH);
+      const values = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
+      const params = batch.flatMap((row) => [
+        concert.id,
+        data.section_id,
+        row.seatNumber,
+        rowLabel,
+        row.order,
+      ]);
+      // eslint-disable-next-line no-await-in-loop
+      const result = await db.query(
+        `INSERT IGNORE INTO seats
+           (concert_id, section_id, seat_number, row_label, display_order)
+         VALUES ${values}`,
+        params,
+      );
+      inserted += Number(result.affectedRows || 0);
+    }
+
+    // The rows themselves, so the console can splice them into the map it is
+    // already holding instead of refetching every seat in the auditorium.
+    const created = toCreate.length
+      ? await db.query(
+          `SELECT s.id, s.seat_number, s.row_label, s.display_order, s.status, s.note,
+                  s.section_id, sec.name AS section_name
+             FROM seats s
+             JOIN sections sec ON sec.id = s.section_id
+            WHERE s.concert_id = ? AND s.seat_number IN (${toCreate.map(() => '?').join(', ')})
+            ORDER BY s.display_order ASC, s.seat_number ASC`,
+          [concert.id, ...toCreate.map((row) => row.seatNumber)],
+        )
+      : [];
 
     await audit(req, {
       action: 'SEATS_BULK_CREATED',
       entityType: 'SECTION',
       entityId: data.section_id,
-      metadata: { created: created.length, skipped: skipped.length, prefix: data.prefix },
+      metadata: { created: inserted, skipped: skipped.length, prefix: data.prefix },
     });
 
     res.status(201).json({
-      created,
+      created: created.map((row) => row.seat_number),
+      seats: created,
+      section_id: data.section_id,
       skipped,
-      message: `Added ${created.length} seats${skipped.length ? `, skipped ${skipped.length} that already existed` : ''}.`,
+      message: `Added ${inserted} seat${inserted === 1 ? '' : 's'}${
+        skipped.length ? `, skipped ${skipped.length} that already existed` : ''
+      }.`,
     });
   }),
 );
@@ -953,213 +1055,71 @@ router.delete(
 // ---------------------------------------------------------------------------
 
 /**
- * One CSV field.
+ * Reports, in the two formats the church uses: CSV and PDF.
  *
- * Fields are always quoted and inner quotes doubled, per RFC 4180, so a comma
- * in an address or a quote in a name cannot shift the columns.
+ * Both formats come from one definition per report in lib/exports.js, so a
+ * report's spreadsheet and its printout are guaranteed to hold the same columns
+ * and the same rows. Building them separately is how a PDF ends up with fewer
+ * columns than the CSV, or — as happened here — with no rows at all.
  *
- * The leading apostrophe on anything starting with = + - @ is deliberate:
- * without it, Excel and Sheets treat the cell as a formula. A phone number
- * beginning "+91..." is the common case, and a field like
- * `=HYPERLINK(...)` in a name would otherwise execute on open. This is CSV
- * injection, and quoting alone does not prevent it.
+ * Excel is gone as a format. It was never really one: the button emitted the
+ * same CSV with a byte-order mark, so offering it as a third choice implied a
+ * fidelity that did not exist. The BOM is still written, which is the part that
+ * made Excel open accented names correctly.
+ *
+ * `:key` is matched against the REPORTS table rather than interpolated
+ * anywhere, so an unknown key is a 404 and never a query.
  */
-const csvCell = (value) => {
-  if (value === null || value === undefined) return '""';
-  let text = value instanceof Date ? value.toISOString() : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return `"${text.replace(/"/g, '""')}"`;
+const reportFor = async (req) => {
+  const build = exports_.REPORTS[String(req.params.key)];
+  if (!build) throw notFound('No such report.', 'NO_REPORT');
+  return build(req);
 };
 
-const csvRow = (values) => values.map(csvCell).join(',') + '\r\n';
-
-/** Send a CSV as a download named after the concert and today's date. */
-function sendCsv(res, filename, header, rows) {
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  // A BOM so Excel opens UTF-8 names correctly instead of mangling accents.
-  res.write('\uFEFF');
-  res.write(csvRow(header));
-  for (const row of rows) res.write(csvRow(row));
-  res.end();
-}
-
-const slug = (text) =>
-  String(text || 'export')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-/**
- * Every registered account as CSV, with what they hold.
- * `?concert_id=` narrows the seat columns to one concert.
- */
 router.get(
-  '/export/users.csv',
+  '/export/:key.csv',
   asyncRoute(async (req, res) => {
-    const concertId = req.query.concert_id ? Number(req.query.concert_id) : null;
-    const params = [];
-    let seatJoin = '';
-
-    if (concertId) {
-      seatJoin = `AND b.concert_id = ?`;
-      params.push(concertId);
-    }
-
-    const users = await db.query(
-      `SELECT u.id, u.full_name, u.email, u.mobile_number, u.whatsapp_number,
-              u.whatsapp_verified, u.date_of_birth, u.gender, u.address,
-              u.emergency_contact, u.is_active, u.disabled_reason,
-              u.terms_accepted_at, u.created_at, u.last_login_at,
-              COUNT(b.id) AS seats_held,
-              GROUP_CONCAT(DISTINCT s.seat_number ORDER BY s.seat_number SEPARATOR ' ') AS seat_numbers,
-              GROUP_CONCAT(DISTINCT b.booking_reference ORDER BY b.booking_reference SEPARATOR ' ') AS refs
-         FROM users u
-         LEFT JOIN bookings b
-                ON b.user_id = u.id AND b.status IN ('PENDING','CONFIRMED') ${seatJoin}
-         LEFT JOIN seats s ON s.id = b.seat_id
-        GROUP BY u.id
-        ORDER BY u.id ASC`,
-      params,
-    );
+    const report = await reportFor(req);
 
     await audit(req, {
-      action: 'EXPORT_USERS',
-      entityType: 'USER',
-      metadata: { rows: users.length, concert_id: concertId },
+      action: report.audit.action,
+      entityType: report.audit.entityType,
+      metadata: {
+        format: 'csv',
+        rows: report.audit.rows,
+        concert_id: req.query.concert_id || null,
+      },
     });
 
-    const label = concertId ? slug((await bookingService.getConcert(concertId)).name) : 'all';
-
-    sendCsv(
-      res,
-      `users-${label}-${today()}.csv`,
-      [
-        'User ID', 'Full name', 'Email', 'Mobile', 'WhatsApp', 'WhatsApp verified',
-        'Date of birth', 'Age', 'Gender', 'Address', 'Emergency contact',
-        'Account status', 'Disabled reason', 'Seats held', 'Seat numbers',
-        'Booking references', 'Terms accepted', 'Registered', 'Last sign-in',
-      ],
-      users.map((u) => [
-        u.id,
-        u.full_name,
-        u.email,
-        u.mobile_number,
-        u.whatsapp_number,
-        u.whatsapp_verified ? 'Yes' : 'No',
-        u.date_of_birth,
-        ageOn(u.date_of_birth),
-        String(u.gender || '').replace(/_/g, ' ').toLowerCase(),
-        u.address,
-        u.emergency_contact,
-        u.is_active ? 'Active' : 'Disabled',
-        u.disabled_reason,
-        Number(u.seats_held),
-        u.seat_numbers,
-        u.refs,
-        u.terms_accepted_at,
-        u.created_at,
-        u.last_login_at,
-      ]),
-    );
+    exports_.sendCsv(res, `${report.filename}.csv`, report.header, report.rows);
   }),
 );
 
-/**
- * Bookings as CSV, one row per seat so the file can be sorted by seat number
- * and used as a door list. `?concert_id=` narrows it; `?status=` defaults to
- * live bookings only, since that is what a door list needs.
- */
 router.get(
-  '/export/bookings.csv',
+  '/export/:key.pdf',
   asyncRoute(async (req, res) => {
-    const where = [];
-    const params = [];
-
-    if (req.query.concert_id) {
-      where.push('b.concert_id = ?');
-      params.push(Number(req.query.concert_id));
-    }
-
-    const status = String(req.query.status || 'live').toLowerCase();
-    if (status === 'live') {
-      where.push("b.status IN ('PENDING','CONFIRMED')");
-    } else if (status !== 'all') {
-      where.push('b.status = ?');
-      params.push(status.toUpperCase());
-    }
-
-    const rows = await db.query(
-      `SELECT b.booking_reference, b.status, b.source, b.created_at, b.confirmed_at,
-              b.cancelled_at, b.cancelled_by, b.cancel_reason, b.note,
-              s.seat_number, sec.name AS section_name,
-              c.name AS concert_name, c.event_date, c.start_time, c.venue,
-              u.id AS user_id, u.full_name, u.email, u.mobile_number,
-              u.whatsapp_number, u.whatsapp_verified, u.emergency_contact,
-              a.full_name AS booked_by_admin,
-              (SELECT COUNT(*) FROM bookings x
-                WHERE x.booking_reference = b.booking_reference
-                  AND x.status IN ('PENDING','CONFIRMED')) AS party_size
-         FROM bookings b
-         JOIN seats s ON s.id = b.seat_id
-         JOIN sections sec ON sec.id = s.section_id
-         JOIN concerts c ON c.id = b.concert_id
-         JOIN users u ON u.id = b.user_id
-         LEFT JOIN admins a ON a.id = b.created_by_admin_id
-        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY c.event_date ASC, s.display_order ASC, s.seat_number ASC`,
-      params,
-    );
+    const report = await reportFor(req);
 
     await audit(req, {
-      action: 'EXPORT_BOOKINGS',
-      entityType: 'BOOKING',
-      metadata: { rows: rows.length, concert_id: req.query.concert_id || null, status },
+      action: report.audit.action,
+      entityType: report.audit.entityType,
+      metadata: {
+        format: 'pdf',
+        rows: report.audit.rows,
+        concert_id: req.query.concert_id || null,
+      },
     });
 
-    const label = req.query.concert_id
-      ? slug((await bookingService.getConcert(Number(req.query.concert_id))).name)
-      : 'all-concerts';
-
-    sendCsv(
-      res,
-      `bookings-${label}-${today()}.csv`,
-      [
-        'Seat', 'Section', 'Booking reference', 'Party size', 'Attendee', 'Email',
-        'Mobile', 'WhatsApp', 'WhatsApp verified', 'Emergency contact',
-        'Concert', 'Event date', 'Start time', 'Venue', 'Status', 'Booking fee',
-        'Booked', 'Confirmed', 'Source', 'Booked by admin',
-        'Cancelled', 'Cancelled by', 'Cancel reason', 'Note',
-      ],
-      rows.map((r) => [
-        r.seat_number,
-        r.section_name,
-        r.booking_reference,
-        Number(r.party_size),
-        r.full_name,
-        r.email,
-        r.mobile_number,
-        r.whatsapp_number,
-        r.whatsapp_verified ? 'Yes' : 'No',
-        r.emergency_contact,
-        r.concert_name,
-        r.event_date,
-        r.start_time,
-        r.venue,
-        r.status,
-        'FREE',
-        r.created_at,
-        r.confirmed_at,
-        r.source,
-        r.booked_by_admin,
-        r.cancelled_at,
-        r.cancelled_by,
-        r.cancel_reason,
-        r.note,
-      ]),
+    // HTML, not a PDF byte stream. The browser's own print-to-PDF does the
+    // conversion, which is honest about what it is rather than shipping a PDF
+    // writer for four tables. ?print=1 opens the dialog on load.
+    res.type('html').send(
+      exports_.renderReportDocument({
+        title: report.title,
+        subtitle: report.subtitle,
+        header: report.header,
+        rows: report.rows,
+      }),
     );
   }),
 );
@@ -1693,26 +1653,325 @@ router.get(
  * /api/bookings/mine/confirmation — the document itself is shared code in
  * lib/ticket.js. Behind requireAdmin like everything else in this file.
  */
+// ---------------------------------------------------------------------------
+// Console accounts
+//
+// Creating a login used to mean `npm run seed:admin` on the server, which is
+// fine for the first account and useless for the eighth. Everything here is
+// SUPER_ADMIN-only: an ADMIN runs the concert, a SUPER_ADMIN decides who else
+// gets in.
+// ---------------------------------------------------------------------------
+
+/** Never leak the hash, and never make the caller remember not to select it. */
+const PUBLIC_ADMIN_COLUMNS =
+  'id, full_name, email, role, is_active, last_login_at, created_by_admin_id, created_at';
+
+/**
+ * How many SUPER_ADMINs could still sign in if `excludeId` stopped being one.
+ *
+ * Guards the two ways to lock every human out of account management: demoting
+ * the last super admin, and disabling or deleting them. Both are easy to do by
+ * accident on a two-account install, and neither is recoverable from the
+ * console afterwards — it would take shell access and seed-admin.
+ */
+async function otherSuperAdmins(excludeId) {
+  const row = await db.queryOne(
+    `SELECT COUNT(*) AS count FROM admins
+      WHERE role = 'SUPER_ADMIN' AND is_active = 1 AND id <> ?`,
+    [excludeId],
+  );
+  return Number(row.count);
+}
+
+router.get(
+  '/staff',
+  auth.requireSuperAdmin,
+  asyncRoute(async (req, res) => {
+    const admins = await db.query(
+      `SELECT a.id, a.full_name, a.email, a.role, a.is_active, a.last_login_at,
+              a.created_by_admin_id, a.created_at,
+              creator.full_name AS created_by_name
+         FROM admins a
+         LEFT JOIN admins creator ON creator.id = a.created_by_admin_id
+        ORDER BY a.is_active DESC, a.id ASC`,
+    );
+
+    res.json({
+      admins,
+      // The console needs to know which row is the caller's own, so it can grey
+      // out the controls that would lock them out rather than let them try.
+      me: req.admin.id,
+    });
+  }),
+);
+
+router.post(
+  '/staff',
+  auth.requireSuperAdmin,
+  asyncRoute(async (req, res) => {
+    const data = parse(schemas.adminAccountCreateSchema, req.body);
+
+    const clash = await db.queryOne('SELECT id FROM admins WHERE email = ? LIMIT 1', [data.email]);
+    if (clash) throw conflict('An account already uses that email address.', 'EMAIL_IN_USE');
+
+    const result = await db.query(
+      `INSERT INTO admins (full_name, email, password_hash, role, created_by_admin_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [data.full_name, data.email, await hashPassword(data.password), data.role, req.admin.id],
+    );
+
+    await audit(req, {
+      action: 'ADMIN_ACCOUNT_CREATED',
+      entityType: 'ADMIN',
+      entityId: result.insertId,
+      // The password is not in the metadata, obviously, but nor is it in the
+      // response: it was typed by the person creating the account, who already
+      // knows it and has to pass it on out of band.
+      metadata: { email: data.email, role: data.role },
+    });
+
+    const admin = await db.queryOne(
+      `SELECT ${PUBLIC_ADMIN_COLUMNS} FROM admins WHERE id = ?`,
+      [result.insertId],
+    );
+    res.status(201).json({ admin });
+  }),
+);
+
+router.patch(
+  '/staff/:id',
+  auth.requireSuperAdmin,
+  asyncRoute(async (req, res) => {
+    const data = parse(schemas.adminAccountUpdateSchema, req.body);
+    const id = Number(req.params.id);
+
+    const target = await db.queryOne('SELECT * FROM admins WHERE id = ? LIMIT 1', [id]);
+    if (!target) throw notFound('No such account.');
+
+    // Disabling or demoting yourself is how somebody locks themselves out of
+    // the screen they would need to undo it.
+    if (id === req.admin.id && (data.is_active === false || data.role !== undefined)) {
+      throw badRequest(
+        'You cannot change your own role or disable your own account.',
+        'SELF_LOCKOUT',
+      );
+    }
+
+    const losesSuper =
+      target.role === 'SUPER_ADMIN' &&
+      ((data.role !== undefined && data.role !== 'SUPER_ADMIN') || data.is_active === false);
+    if (losesSuper && (await otherSuperAdmins(id)) === 0) {
+      throw conflict(
+        'This is the last active super admin. Promote somebody else first.',
+        'LAST_SUPER_ADMIN',
+      );
+    }
+
+    const updates = [];
+    const params = [];
+    if (data.full_name !== undefined) {
+      updates.push('full_name = ?');
+      params.push(data.full_name);
+    }
+    if (data.role !== undefined) {
+      // The role is baked into the session token, so a role change has to
+      // invalidate existing sessions or the demoted account keeps its old
+      // authority until the cookie happens to expire.
+      updates.push('role = ?', 'token_version = token_version + 1');
+      params.push(data.role);
+    }
+    if (data.is_active !== undefined) {
+      updates.push('is_active = ?', 'token_version = token_version + 1');
+      params.push(data.is_active ? 1 : 0);
+    }
+
+    params.push(id);
+    await db.query(`UPDATE admins SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    await audit(req, {
+      action: data.is_active === false ? 'ADMIN_ACCOUNT_DISABLED' : 'ADMIN_ACCOUNT_UPDATED',
+      entityType: 'ADMIN',
+      entityId: id,
+      metadata: data,
+    });
+
+    const admin = await db.queryOne(`SELECT ${PUBLIC_ADMIN_COLUMNS} FROM admins WHERE id = ?`, [id]);
+    res.json({ admin });
+  }),
+);
+
+/**
+ * Set somebody else's password.
+ *
+ * Its own endpoint rather than a field on the update above, because the
+ * consequence is different in kind: bumping token_version signs the account out
+ * of every device it is signed in on. That is the right behaviour — a password
+ * is reset when it may be known to somebody it should not be — but it is not
+ * something to do as a side effect of a rename.
+ */
+router.post(
+  '/staff/:id/password',
+  auth.requireSuperAdmin,
+  asyncRoute(async (req, res) => {
+    const data = parse(schemas.adminPasswordResetSchema, req.body);
+    const id = Number(req.params.id);
+
+    const target = await db.queryOne('SELECT id, email FROM admins WHERE id = ? LIMIT 1', [id]);
+    if (!target) throw notFound('No such account.');
+    if (id === req.admin.id) {
+      throw badRequest(
+        'Change your own password under Settings → Security, so the current one is checked.',
+        'USE_SELF_SERVICE',
+      );
+    }
+
+    await db.query(
+      'UPDATE admins SET password_hash = ?, token_version = token_version + 1 WHERE id = ?',
+      [await hashPassword(data.new_password), id],
+    );
+
+    await audit(req, {
+      action: 'ADMIN_PASSWORD_RESET',
+      entityType: 'ADMIN',
+      entityId: id,
+      metadata: { email: target.email },
+    });
+
+    res.json({
+      ok: true,
+      message: `Password set for ${target.email}. Any sessions they had are signed out.`,
+    });
+  }),
+);
+
+router.delete(
+  '/staff/:id',
+  auth.requireSuperAdmin,
+  asyncRoute(async (req, res) => {
+    const id = Number(req.params.id);
+    if (id === req.admin.id) throw badRequest('You cannot delete your own account.', 'SELF_LOCKOUT');
+
+    const target = await db.queryOne('SELECT * FROM admins WHERE id = ? LIMIT 1', [id]);
+    if (!target) throw notFound('No such account.');
+
+    if (target.role === 'SUPER_ADMIN' && (await otherSuperAdmins(id)) === 0) {
+      throw conflict(
+        'This is the last active super admin. Promote somebody else first.',
+        'LAST_SUPER_ADMIN',
+      );
+    }
+
+    // Audited before the row goes, so the entry can still name who it was.
+    // audit_logs stores actor_label as text and bookings.created_by_admin_id is
+    // ON DELETE SET NULL, so history survives the account; only the login goes.
+    await audit(req, {
+      action: 'ADMIN_ACCOUNT_DELETED',
+      entityType: 'ADMIN',
+      entityId: id,
+      metadata: { email: target.email, role: target.role },
+    });
+
+    await db.query('DELETE FROM admins WHERE id = ?', [id]);
+    res.json({ ok: true, message: `${target.email} can no longer sign in.` });
+  }),
+);
+
+/**
+ * The party and its holder, by reference, for the two printable documents.
+ * Both need exactly the same lookup and the same "no live booking" answer.
+ */
+async function printable(reference) {
+  const holder = await db.queryOne(
+    `SELECT u.id, u.full_name, u.whatsapp_number
+       FROM bookings b JOIN users u ON u.id = b.user_id
+      WHERE b.booking_reference = ? AND b.status IN ${bookingService.ACTIVE}
+      LIMIT 1`,
+    [reference],
+  );
+  if (!holder) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+
+  const party = await bookingService.getBookingByReference(reference);
+  if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+
+  return { party, holder };
+}
+
 router.get(
   '/bookings/:reference/ticket',
   asyncRoute(async (req, res) => {
-    const reference = String(req.params.reference).trim();
-
-    const holder = await db.queryOne(
-      `SELECT u.id, u.full_name, u.whatsapp_number
-         FROM bookings b JOIN users u ON u.id = b.user_id
-        WHERE b.booking_reference = ? AND b.status IN ${bookingService.ACTIVE}
-        LIMIT 1`,
-      [reference],
-    );
-    if (!holder) throw notFound('No live booking has that reference.', 'NO_BOOKING');
-
-    const party = await bookingService.getBookingByReference(reference);
-    if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+    const { party, holder } = await printable(String(req.params.reference).trim());
 
     res.type('html').send(
       await renderTicket(party, holder, { autoPrint: req.query.print === '1' }),
     );
+  }),
+);
+
+/**
+ * Printable hand bands for a booking — the wristbands a steward puts on.
+ *
+ * Admin-only, and reachable from the check-in screen rather than from an
+ * attendee's dashboard. That placement is the point: a band says this person has
+ * been checked in, so it can only be issued after a steward has verified the
+ * ticket. An attendee who could print their own band at home would make the
+ * scan pointless.
+ *
+ * One band per seat by default, because a band goes on one wrist. `?seat=`
+ * narrows it to a single seat, for the guest who turns up an hour after the rest
+ * of their party, or whose band tore. `?colour=` picks the strip colour; the
+ * palette lives in lib/hand-band.js and defaults to violet.
+ */
+router.get(
+  '/bookings/:reference/band',
+  asyncRoute(async (req, res) => {
+    const { party, holder } = await printable(String(req.params.reference).trim());
+
+    const wanted = req.query.seat ? String(req.query.seat).trim().toUpperCase() : null;
+    const seats = wanted
+      ? party.seats.filter((row) => String(row.seat_number).toUpperCase() === wanted)
+      : party.seats;
+
+    if (!seats.length) {
+      throw notFound(
+        wanted ? `No seat ${wanted} on that booking.` : 'That booking holds no seats.',
+        'NO_SEATS',
+      );
+    }
+
+    // guest_name is populated for every live row — migration 006 backfilled the
+    // account holder onto anything booked before guest details existed — but the
+    // fallback stays so a band can never print blank.
+    const guests = seats.map((seat) => ({
+      name: seat.guest_name || holder.full_name,
+      seat_number: seat.seat_number,
+      section_name: seat.section_name,
+    }));
+
+    await audit(req, {
+      action: 'HAND_BANDS_PRINTED',
+      entityType: 'BOOKING',
+      entityId: party.seats[0]?.booking_id ?? null,
+      metadata: {
+        reference: party.booking_reference,
+        bands: guests.length,
+        colour: req.query.colour || handBand.DEFAULT_COLOUR,
+      },
+    });
+
+    res.type('html').send(
+      await handBand.renderHandBands(party, guests, {
+        autoPrint: req.query.print === '1',
+        colour: String(req.query.colour || handBand.DEFAULT_COLOUR),
+      }),
+    );
+  }),
+);
+
+/** The band palette, so the check-in screen does not hard-code it. */
+router.get(
+  '/band-colours',
+  asyncRoute(async (req, res) => {
+    res.json({ colours: handBand.colourOptions(), default: handBand.DEFAULT_COLOUR });
   }),
 );
 
@@ -1775,8 +2034,9 @@ router.get(
 
     const rows = await db.query(
       `SELECT b.id, b.booking_reference, b.status, b.created_at, b.cancelled_at, b.cancel_reason,
+              b.guest_name, b.guest_email, b.guest_phone, b.guest_age,
               s.seat_number, sec.name AS section_name,
-              u.full_name, u.whatsapp_verified,
+              u.full_name, u.email, u.mobile_number, u.whatsapp_number, u.whatsapp_verified,
               c.id AS concert_id, c.name AS concert_name, c.event_date, c.start_time, c.venue
          FROM bookings b
          JOIN seats s ON s.id = b.seat_id
@@ -1831,6 +2091,8 @@ router.get(
       message,
       reference,
       holder: first.full_name,
+      holder_email: first.email,
+      holder_phone: first.mobile_number || first.whatsapp_number,
       whatsapp_verified: Boolean(first.whatsapp_verified),
       booked_at: first.created_at,
       cancelled_at: first.cancelled_at,
@@ -1843,10 +2105,21 @@ router.get(
         venue: first.venue,
         is_today: whenVerdict === 'TODAY',
       },
+      /* Per-seat guest details, because a steward at the door is dealing with
+         people rather than with a booking: they need to know that seat B7 is
+         a nine-year-old and who the adult with them is. This is also what the
+         hand bands are printed from. */
       seats: rows.map((row) => ({
         seat_number: row.seat_number,
         section_name: row.section_name,
         status: row.status,
+        guest_name: row.guest_name || row.full_name,
+        guest_email: row.guest_email || row.email,
+        guest_phone: row.guest_phone || row.mobile_number || row.whatsapp_number,
+        guest_age: row.guest_age,
+        // Under-18s are flagged rather than left for the steward to work out
+        // from a date; safeguarding is the reason the age is collected at all.
+        is_minor: row.guest_age !== null && Number(row.guest_age) < 18,
       })),
       live_seats: live.length,
       total_seats: rows.length,

@@ -58,6 +58,20 @@ npm start
 
 Open <http://localhost:3000>. The admin dashboard is at `/admin/login.html`.
 
+`seed:admin` is only needed for the *first* account. After that, logins are
+created from the console under **Settings → Staff accounts**, in one of three
+roles:
+
+| Role | Reach |
+| --- | --- |
+| `SUPER_ADMIN` | Everything, including creating and removing other logins |
+| `ADMIN` | The whole console, but cannot manage logins |
+| `STAFF` | Door check-in, and printing a ticket or hand tags. Nothing else |
+
+`STAFF` is what a door steward gets: a login that answers "is this ticket good"
+and prints a replacement, without also being able to cancel bookings, edit
+concerts or export the attendee list.
+
 Migrations only ever add to your database. They create tables prefixed for this
 application and record what ran in `schema_migrations`, so `npm run migrate` is
 safe to re-run and will not touch anything already there.
@@ -304,7 +318,7 @@ The hash keeps the current panel across a reload.
 | Bookings | Filterable table, and a details drawer with customer, concert, seat, ticket and timeline |
 | Attendees | Everyone registered, with a drawer showing their contact details and booking history |
 | Notifications | The staff feed, by category, with read state and an unread badge on the bell |
-| Reports & Export | Booking trend, occupancy, per-concert performance, and CSV / Excel / PDF export |
+| Reports & Export | Booking trend, occupancy, per-concert performance, and CSV / PDF export |
 | Settings | Branding, concert rules, email, WhatsApp, and your own password |
 
 Three things about it are worth knowing before changing it:

@@ -1,0 +1,452 @@
+/* ===========================================================================
+   Printable documents: the seat confirmation, and the shared furniture every
+   printable page uses (tokens, buttons, the screen-only action bar).
+   Hand bands add /css/band.css on top of this.
+
+   Served as a file rather than embedded in a <style> block on purpose.
+
+   The CSP is style-src 'self' with no 'unsafe-inline' (see src/app.js). An
+   embedded <style> block is therefore dropped by the browser, which is what
+   used to make a downloaded ticket arrive with no styling at all — the "clumsy"
+   ticket. Anything the printable pages need has to live in a file under /css.
+
+   Three rules run through the whole sheet, all of them about paper:
+
+     * Artwork is in <img> tags, never a CSS background. Browsers do not print
+       background images unless the reader ticks "Background graphics", and a
+       ticket that loses its branding at the printer is no good.
+     * Colour survives via print-color-adjust: exact. Without it the navy
+       header prints white and the gold rules vanish.
+     * Every horizontal measurement is derived from one gutter token, so the
+       masthead, the reference, the facts and the footer share a left edge.
+       That single shared edge is most of what "neat" means here.
+   ========================================================================= */
+
+:root {
+  --navy: #16233d;
+  --navy-deep: #0d1729;
+  --gold: #b58328;
+  --gold-light: #e0ac4c;
+  --ink: #0f172a;
+  --body-ink: #3d4757;
+  --muted: #64748b;
+  --line: #d8dee8;
+  --wash: #f6f8fc;
+  --cream: #fdf9f0;
+
+  /* A4 is 210mm; @page trims 12mm a side, leaving 186mm of printable width.
+     The sheet spans all of it, and everything inside is inset by one gutter. */
+  --page-w: 186mm;
+  --gutter: 13mm;
+
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Sheet geometry. In the stylesheet rather than a per-page <style> block for
+   the same CSP reason as everything else here. */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px 48px;
+  background: #eef1f6;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+.sheet {
+  width: 100%;
+  max-width: var(--page-w);
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 20px 44px -28px rgba(15, 23, 42, 0.4);
+}
+
+/* --- Masthead -------------------------------------------------------------
+   The type sits in normal flow inside a padded block and the artwork is
+   absolutely positioned behind it, rather than the reverse. Text in flow means
+   the header grows to fit a long concert name instead of overflowing a fixed
+   height, which is what used to clip longer titles.
+   ---------------------------------------------------------------------- */
+.hero {
+  position: relative;
+  isolation: isolate;
+  padding: 9mm var(--gutter);
+  background: var(--navy-deep);
+  color: #fff;
+  overflow: hidden;
+}
+.hero__art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Dark on the left so the type holds up, clearer on the right so the church
+   actually shows. A flat scrim would hide the artwork entirely, which rather
+   defeats having it. */
+.hero__veil {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    var(--navy-deep) 0%,
+    rgba(13, 23, 41, 0.88) 38%,
+    rgba(13, 23, 41, 0.5) 68%,
+    rgba(13, 23, 41, 0.18) 100%
+  );
+}
+.hero__org {
+  margin: 0 0 2mm;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.hero__event {
+  margin: 0;
+  font-size: 19pt;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.hero__when {
+  margin: 2.5mm 0 0;
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+/* --- Claim strip: reference and QR ---------------------------------------
+   A two-column grid, not flexbox. The QR column is a fixed 34mm and the text
+   column takes the rest, so the reference always starts on the sheet's left
+   edge and the QR always ends on its right edge — on a one-seat booking and a
+   twelve-seat booking alike.
+   ---------------------------------------------------------------------- */
+.claim {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34mm;
+  align-items: center;
+  gap: var(--gutter);
+  padding: 7mm var(--gutter);
+  border-bottom: 2px solid var(--gold);
+  background: linear-gradient(180deg, var(--cream) 0%, #fff 100%);
+}
+.claim__label {
+  margin: 0 0 1.5mm;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.claim__ref {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 20pt;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  color: var(--navy);
+  /* break-all would hyphenate a reference mid-group. These are fixed-format
+     (CHC-2026-00003) and fit the column, so keep them on one line. */
+  word-break: normal;
+}
+.claim__name {
+  margin: 2.5mm 0 0;
+  font-size: 11pt;
+  font-weight: 600;
+}
+.claim__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+  margin-top: 3mm;
+}
+.badge {
+  display: inline-block;
+  padding: 1mm 3mm;
+  border-radius: 999px;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.badge--gold {
+  background: var(--gold);
+  color: #fff;
+}
+.badge--quiet {
+  background: var(--wash);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.qr {
+  text-align: center;
+}
+/* 30mm of code is comfortably above the ~20mm a phone camera needs at arm's
+   length. The quiet zone comes from this padding rather than from the code's
+   own margin, so the dark modules use the full 30mm. */
+.qr__frame {
+  width: 34mm;
+  height: 34mm;
+  padding: 2mm;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.qr__frame svg,
+.qr__frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.qr__hint {
+  margin: 2mm 0 0;
+  font-size: 7pt;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+/* --- Facts ---------------------------------------------------------------
+   Three equal columns on one baseline grid. Each fact is its own row-height
+   cell with the rule at the bottom, so the underlines line up across the row
+   even when one value wraps to two lines.
+   ---------------------------------------------------------------------- */
+.facts {
+  padding: 7mm var(--gutter) 0;
+}
+.facts__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5mm var(--gutter);
+  margin: 0;
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  margin: 0;
+  padding-bottom: 3mm;
+  border-bottom: 1px solid var(--line);
+}
+.fact--wide {
+  grid-column: 1 / -1;
+}
+.fact--half {
+  grid-column: span 2;
+}
+.fact dt {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fact dd {
+  margin: 0;
+  font-size: 10.5pt;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.fact dd .sub {
+  display: block;
+  font-weight: 400;
+  font-size: 9pt;
+  color: var(--muted);
+}
+
+/* Seat chips on a fixed-width grid rather than a wrapping flex row: twelve
+   seats then form neat columns instead of a ragged block. */
+.seats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 22mm);
+  gap: 2.5mm;
+  margin-top: 1mm;
+}
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 13mm;
+  padding: 1.5mm 1mm;
+  border: 1.2pt solid var(--navy);
+  border-radius: 8px 8px 5px 5px;
+  background: var(--wash);
+  text-align: center;
+}
+.seat b {
+  font-family: var(--mono);
+  font-size: 11pt;
+  line-height: 1.1;
+  color: var(--navy);
+}
+.seat i {
+  font-style: normal;
+  font-size: 6.5pt;
+  line-height: 1.2;
+  color: var(--muted);
+}
+/* The guest's name, shown only when the party has more than one named person.
+   Clipped rather than wrapped: the chip is a fixed 22mm on a grid, and a long
+   name must not stretch it out of line with its neighbours. */
+.seat u {
+  max-width: 100%;
+  margin-top: 0.6mm;
+  font-size: 6pt;
+  font-weight: 600;
+  line-height: 1.15;
+  text-decoration: none;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- On the night ------------------------------------------------------- */
+.notes {
+  display: grid;
+  grid-template-columns: 14mm minmax(0, 1fr);
+  align-items: start;
+  gap: 5mm;
+  padding: 6mm var(--gutter) 7mm;
+}
+.notes__crest {
+  width: 14mm;
+  height: 14mm;
+  opacity: 0.9;
+}
+.notes__list {
+  margin: 0;
+  padding-left: 5mm;
+  font-size: 9pt;
+  line-height: 1.45;
+  color: var(--body-ink);
+}
+.notes__list li + li {
+  margin-top: 1.2mm;
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 5mm;
+  flex-wrap: wrap;
+  padding: 4mm var(--gutter);
+  border-top: 1px solid var(--line);
+  background: #fbfcfd;
+  font-size: 7.5pt;
+  color: var(--muted);
+}
+.foot code {
+  font-family: var(--mono);
+  font-size: 7pt;
+  word-break: break-all;
+}
+
+/* --- Controls (screen only) -------------------------------------------- */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: var(--page-w);
+  margin: 18px auto 0;
+}
+.btn {
+  display: inline-block;
+  padding: 11px 20px;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--gold);
+  color: #1c1508;
+}
+.btn--ghost {
+  background: #fff;
+  color: var(--navy);
+  border-color: var(--line);
+}
+.actions__hint {
+  flex: 1 1 14rem;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --- Print ------------------------------------------------------------- */
+@media print {
+  body {
+    padding: 0;
+    background: #fff;
+  }
+  .sheet {
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .actions,
+  .no-print {
+    display: none !important;
+  }
+  .claim,
+  .notes,
+  .facts__grid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* --- Narrow screens ---------------------------------------------------- */
+@media screen and (max-width: 620px) {
+  body {
+    font-size: 13px;
+  }
+  .claim {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+  .facts__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fact--half,
+  .fact--wide {
+    grid-column: 1 / -1;
+  }
+  .hero__event {
+    font-size: 17pt;
+  }
+}

@@ -1,0 +1,229 @@
+/* ===========================================================================
+   Hand bands — the wristband a steward puts on a guest at the door.
+
+   Layered on top of /css/ticket.css, which supplies the tokens, the buttons and
+   the screen-only action bar. Loaded second on purpose: the @page rule below
+   overrides the portrait one there, and later-wins is the whole mechanism.
+
+   A strip, because that is what goes round a wrist: 220mm x 30mm. Long enough
+   for an adult wrist (16–19cm) plus an overlap to stick down. That does not fit
+   across portrait A4 — 186mm of printable width — which is why this document
+   prints landscape, where there is 281mm to play with and six bands to a sheet.
+
+   Everything that matters is repeated at both ends of the strip and mirrored
+   about the centre. Half a band faces away once it is on a wrist, and a steward
+   re-checking somebody should not have to turn their arm over to find the code.
+
+   Colour comes from data-band on <html>, so the whole strip re-themes from one
+   attribute and the server never interpolates a colour into markup.
+   ========================================================================= */
+
+@page {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+.bands-body {
+  --band-ink: #5b21b6;
+  --band-edge: #7c3aed;
+  padding: 20px 16px 40px;
+}
+
+html[data-band='violet'] .bands-body {
+  --band-ink: #5b21b6;
+  --band-edge: #7c3aed;
+}
+html[data-band='purple'] .bands-body {
+  --band-ink: #6b21a8;
+  --band-edge: #9333ea;
+}
+html[data-band='indigo'] .bands-body {
+  --band-ink: #3730a3;
+  --band-edge: #4f46e5;
+}
+html[data-band='navy'] .bands-body {
+  --band-ink: #16233d;
+  --band-edge: #2c4a7c;
+}
+html[data-band='teal'] .bands-body {
+  --band-ink: #115e59;
+  --band-edge: #0d9488;
+}
+html[data-band='green'] .bands-body {
+  --band-ink: #166534;
+  --band-edge: #16a34a;
+}
+html[data-band='amber'] .bands-body {
+  --band-ink: #92400e;
+  --band-edge: #d97706;
+}
+html[data-band='rose'] .bands-body {
+  --band-ink: #9f1239;
+  --band-edge: #e11d48;
+}
+
+.bands-page {
+  width: 100%;
+  max-width: 220mm;
+  margin: 0 auto;
+}
+
+.bands-head {
+  margin: 0 0 6mm;
+  padding: 5mm 6mm;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--band-ink);
+  border-radius: 12px;
+}
+.bands-head h1 {
+  margin: 0;
+  font-size: 15pt;
+  color: var(--band-ink);
+}
+.bands-head p {
+  margin: 2mm 0 0;
+  font-size: 9pt;
+  color: var(--muted);
+}
+.bands-head strong {
+  color: var(--ink);
+}
+
+.bands-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+}
+
+.band {
+  display: grid;
+  /* Fixed end blocks with the branding taking the slack, so both QR codes sit
+     the same distance from their own edge on every band. */
+  grid-template-columns: 46mm minmax(0, 1fr) 46mm;
+  align-items: stretch;
+  width: 220mm;
+  height: 30mm;
+  background: var(--band-ink);
+  color: #fff;
+  /* Dashed, so the border doubles as the cut line. */
+  border: 1pt dashed rgba(255, 255, 255, 0.55);
+  border-radius: 2mm;
+  overflow: hidden;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.band__end {
+  display: grid;
+  grid-template-columns: 20mm minmax(0, 1fr);
+  align-items: center;
+  gap: 2.5mm;
+  padding: 2mm 3mm;
+  background: rgba(255, 255, 255, 0.08);
+}
+/* The far end reads the other way up, so it is upright when the wrist is
+   turned. Rotating the whole block keeps the QR square, which a transform on
+   the code alone would risk skewing. */
+.band__end--flip {
+  transform: rotate(180deg);
+}
+
+.band__qr {
+  width: 20mm;
+  height: 20mm;
+  padding: 1mm;
+  background: #fff;
+  border-radius: 1.5mm;
+}
+.band__qr svg,
+.band__qr img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.band__who {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.8mm;
+  min-width: 0;
+}
+.band__ref {
+  font-family: var(--mono);
+  font-size: 9.5pt;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+/* One line, clipped. A long name must never push the reference off the strip:
+   the reference is what gets typed in when a code will not scan. */
+.band__name {
+  font-size: 8.5pt;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.band__middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8mm;
+  padding: 2mm;
+  text-align: center;
+  border-left: 1pt dashed rgba(255, 255, 255, 0.35);
+  border-right: 1pt dashed rgba(255, 255, 255, 0.35);
+  background: linear-gradient(
+    90deg,
+    var(--band-ink) 0%,
+    var(--band-edge) 50%,
+    var(--band-ink) 100%
+  );
+}
+.band__brand {
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+.band__event {
+  max-width: 100%;
+  font-size: 12pt;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.band__meta {
+  font-size: 7pt;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+@media print {
+  .bands-body {
+    padding: 0;
+    background: #fff;
+  }
+  .bands-page {
+    max-width: none;
+  }
+  .bands-grid {
+    gap: 6mm;
+  }
+}
+
+/* A band is a fixed physical size, so on a narrow screen it scrolls inside its
+   own container rather than being squashed to something un-printable. */
+@media screen and (max-width: 900px) {
+  .bands-grid {
+    overflow-x: auto;
+    padding-bottom: 4mm;
+  }
+}

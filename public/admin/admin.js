@@ -1187,8 +1187,13 @@
         applyZoom();
       });
     });
-    $('[data-action="refresh-seats"]').addEventListener('click', () => {
-      refreshSeatMap().then(() => UI.toast('Seat map refreshed')).catch((e) => fail(e, 'Refresh failed'));
+    $('[data-action="refresh-seats"]').addEventListener('click', (event) => {
+      const button = event.currentTarget;
+      busy(button, true, 'Refreshing…');
+      refreshSeatMap({ quiet: true })
+        .then(() => UI.toast('Seat map refreshed'))
+        .catch((e) => fail(e, 'Refresh failed'))
+        .finally(() => busy(button, false));
     });
     $('[data-action="add-section"]').addEventListener('click', addSection);
     $('[data-action="add-seats"]').addEventListener('click', addSeats);
@@ -1200,9 +1205,18 @@
     $('[data-zoom-level]').textContent = `${Math.round(state.seat.zoom * 100)}%`;
   }
 
-  async function refreshSeatMap() {
+  /**
+   * `quiet` refetches without tearing the map down first.
+   *
+   * The skeleton is right on a cold load, where there is nothing to look at
+   * anyway, and wrong on a refresh: replacing a rendered auditorium with grey
+   * boxes and then rebuilding it reads as a page reload, which is exactly what
+   * this console is supposed to avoid. On a refresh the old map stays on screen
+   * until the new one is ready to swap in.
+   */
+  async function refreshSeatMap({ quiet = false } = {}) {
     const viewport = $('[data-viewport]');
-    UI.skeleton(viewport, { kind: 'chart', count: 1 });
+    if (!quiet || !state.seat.map) UI.skeleton(viewport, { kind: 'chart', count: 1 });
     const data = await api(`/api/admin/seats?concert_id=${state.concertId}`);
     state.seat.map = data;
 
@@ -1220,6 +1234,41 @@
     renderSeatMap();
     renderSeatLegend();
     renderInspector();
+  }
+
+  /**
+   * Add newly created seats to the map already on screen and re-render.
+   *
+   * The alternative is refetching every seat in the auditorium to learn about
+   * twenty new ones, which is the round trip that made adding seats feel slow.
+   * The server returns the rows it created, and they are complete enough to
+   * render, so the client can just place them.
+   *
+   * Seats added to a section that is not currently loaded fall back to a
+   * refetch — that only happens if the section list changed underneath us,
+   * which is rare and not worth guessing about.
+   */
+  function spliceSeats(seats, sectionId) {
+    const section = (state.seat.map?.sections || []).find((s) => s.id === Number(sectionId));
+    if (!section) {
+      refreshSeatMap({ quiet: true }).catch((error) => fail(error, 'Could not refresh the map'));
+      return;
+    }
+
+    // Keyed by seat number so a concurrent add of the same run cannot double it.
+    const known = new Set(section.seats.map((seat) => seat.seat_number));
+    for (const seat of seats) {
+      if (!known.has(seat.seat_number)) section.seats.push(seat);
+    }
+    section.seats.sort(
+      (a, b) =>
+        Number(a.display_order) - Number(b.display_order) ||
+        String(a.seat_number).localeCompare(String(b.seat_number)),
+    );
+
+    renderSeatStats();
+    renderSeatMap();
+    renderSeatLegend();
   }
 
   function allSeats() {
@@ -1594,19 +1643,35 @@
         {
           label: 'Add seats',
           variant: 'primary',
-          onClick: async ({ close }) => {
+          // `button` is the drawer's own action button, so the spinner appears
+          // on the control that was pressed rather than somewhere else on the
+          // page. The drawer stays open until the server answers: closing it
+          // first would leave nowhere to show a validation error.
+          onClick: async ({ close, button }) => {
+            showFieldErrors(form, {});
+            busy(button, true, 'Adding…');
             try {
               const result = await api(`/api/admin/seats/bulk?concert_id=${state.concertId}`, {
                 method: 'POST',
                 body: { ...formValues(form), concert_id: state.concertId },
               });
               close();
+
+              if (result.seats?.length) {
+                spliceSeats(result.seats, result.section_id);
+              } else {
+                await refreshSeatMap({ quiet: true });
+              }
+
               UI.toastSuccess('Seats added', result.message || '');
+              // Counts on other panels are now stale, but nothing is fetched
+              // here — those panels reload when they are next opened.
               invalidate('overview', 'concerts', 'reports');
-              await refreshSeatMap();
             } catch (error) {
               if (error.details) showFieldErrors(form, error.details);
               UI.toastError('Could not add the seats', error.message);
+            } finally {
+              busy(button, false);
             }
           },
         },
@@ -1633,7 +1698,7 @@
     const head = el('tr');
     const headings = {
       ref: 'Booking ID',
-      customer: 'Customer',
+      customer: 'Guest',
       concert: 'Concert',
       seats: 'Seats',
       status: 'Status',
@@ -1655,16 +1720,26 @@
 
       const cells = {
         ref: () => el('td', {}, [el('span', { class: 'data-table__ref', text: row.booking_reference })]),
-        customer: () =>
-          el('td', {}, [
+        /* The guest is the headline, the account holder the subtitle. On a
+           family booking those differ, and the person a steward or an
+           administrator is looking for is the guest — "Ruth Adeyemi x4" was
+           exactly the problem guest details were added to solve. */
+        customer: () => {
+          const guest = row.guest_name || row.full_name;
+          const bookedBy =
+            row.guest_name && row.guest_name !== row.full_name
+              ? `booked by ${row.full_name}`
+              : row.guest_email || row.email || '—';
+          return el('td', {}, [
             el('div', { class: 'cell-person' }, [
-              el('span', { class: 'avatar', 'aria-hidden': 'true', text: initials(row.full_name) }),
+              el('span', { class: 'avatar', 'aria-hidden': 'true', text: initials(guest) }),
               el('div', {}, [
-                el('span', { class: 'data-table__strong', text: row.full_name || '—' }),
-                el('span', { class: 'data-table__sub', text: row.email || '—' }),
+                el('span', { class: 'data-table__strong', text: guest || '—' }),
+                el('span', { class: 'data-table__sub', text: bookedBy }),
               ]),
             ]),
-          ]),
+          ]);
+        },
         concert: () => el('td', { text: row.concert_name || currentConcertName(row) }),
         seats: () =>
           el('td', {}, [
@@ -1684,6 +1759,7 @@
             el('div', { class: 'data-table__actions' }, [
               iconButton('eye-view', 'View booking', () => showBooking(row)),
               iconButton('download', 'Download ticket', () => downloadTicket(row)),
+              iconButton('ticket', 'Print hand bands', () => printHandBands(row)),
               iconButton('send', 'Resend confirmation', () => resendConfirmation(row)),
               row.status === 'CONFIRMED' || row.status === 'PENDING'
                 ? iconButton('trash', 'Cancel booking', () => cancelBooking(row))
@@ -1797,7 +1873,7 @@
         body.append(
           el('div', { class: 'u-flex' }, [statusChip(row.status), el('span', { class: 'chip chip--gold', text: 'Admission free' })]),
 
-          el('h3', { text: 'Customer' }),
+          el('h3', { text: 'Account holder' }),
           el('dl', { class: 'facts' }, [
             fact('Name', row.full_name || '—'),
             fact('Email', row.email || '—'),
@@ -1812,9 +1888,23 @@
             fact('Section', row.section_name || '—'),
           ]),
 
+          el('h3', { text: 'Guest in this seat' }),
+          el('dl', { class: 'facts' }, [
+            fact('Name', row.guest_name || row.full_name),
+            fact('Email', row.guest_email || row.email),
+            fact('Phone', row.guest_phone || row.whatsapp_number),
+            row.guest_age !== null && row.guest_age !== undefined
+              ? fact(
+                  'Age',
+                  Number(row.guest_age) < 18 ? `${row.guest_age} — under 18` : String(row.guest_age),
+                )
+              : null,
+          ]),
+
           el('h3', { text: 'Ticket' }),
           el('dl', { class: 'facts' }, [
             fact('Reference', row.booking_reference),
+            fact('Booked by', row.full_name),
             fact('Created by', row.source === 'ADMIN' ? 'Staff' : 'The attendee'),
             fact('Delivery', row.whatsapp_verified ? 'WhatsApp confirmation sent' : 'Awaiting WhatsApp verification'),
           ]),
@@ -1825,6 +1915,7 @@
       },
       actions: [
         { label: 'Download ticket', onClick: () => downloadTicket(row) },
+        { label: 'Print hand bands', onClick: () => printHandBands(row) },
         { label: 'Resend confirmation', onClick: () => resendConfirmation(row) },
         ...(row.status === 'CONFIRMED' || row.status === 'PENDING'
           ? [
@@ -1871,6 +1962,22 @@
     // the signed-in attendee and an admin session would not satisfy it.
     window.open(
       `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/ticket?print=1`,
+      '_blank',
+      'noopener',
+    );
+  }
+
+  /**
+   * The wristbands for a booking, in a new tab.
+   *
+   * No ?print=1: bands are printed on a sheet that gets cut up, so a wasted
+   * print is wasted card. The steward looks at the sheet, picks a colour, then
+   * prints. Colour choice lives on the band page and on the check-in screen,
+   * which is where a band is normally issued.
+   */
+  function printHandBands(row) {
+    window.open(
+      `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/band`,
       '_blank',
       'noopener',
     );
@@ -1941,9 +2048,36 @@
       return;
     }
 
+    /* Who is actually sitting in the seat, which is often not the account
+       holder — "book a seat for Mrs Varghese's grandson" is the normal office
+       request. Left blank, the seat is recorded against the account, which is
+       the old behaviour. Only the name is needed: staff taking a booking over
+       the phone frequently have nothing else, and refusing the booking until
+       they have an email address for a nine-year-old helps nobody. */
+    const guestField = (name, label, type, icon, hint) =>
+      el('div', { class: 'field' }, [
+        el('label', { for: `mb_guest_${name}`, text: label }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': icon, 'aria-hidden': 'true' }),
+          el('input', { id: `mb_guest_${name}`, name: `guest_${name}`, type, autocomplete: 'off' }),
+        ]),
+        hint ? el('p', { class: 'field__hint', text: hint }) : null,
+        el('span', { class: 'field__error', 'data-error-for': `guests.0.${name}` }),
+      ]);
+
     const form = el('form', {}, [
       selectField('mb_user', 'Attendee', person, 'user'),
       selectField('mb_seat', 'Seat', seat, 'seat'),
+      el('fieldset', { class: 'guest-card' }, [
+        el('legend', { class: 'guest-card__legend' }, [
+          el('b', { text: 'Guest' }),
+          el('span', { text: 'who is in the seat' }),
+        ]),
+        guestField('name', 'Full name', 'text', 'user', 'Leave blank to use the account holder.'),
+        guestField('email', 'Email', 'email', 'mail'),
+        guestField('phone', 'Phone', 'tel', 'phone', 'With country code.'),
+        guestField('age', 'Age', 'number', 'identity', 'Only needed if under 18.'),
+      ]),
       el('div', { class: 'field' }, [
         el('label', { for: 'mb_note', text: 'Note (optional)' }),
         el('span', { class: 'field__control field__control--inline' }, [
@@ -1962,16 +2096,36 @@
         {
           label: 'Create booking',
           variant: 'primary',
-          onClick: async ({ close }) => {
+          onClick: async ({ close, button }) => {
+            showFieldErrors(form, {});
+            busy(button, true, 'Booking…');
             try {
               const values = formValues(form);
+              const seatId = Number(values.seat_ids);
+
+              // No name means no guest block at all, rather than a guest whose
+              // name is the empty string — the schema would reject that, and
+              // "leave it blank to use the account holder" has to actually work.
+              const guests = values.guest_name?.trim()
+                ? [
+                    {
+                      seat_id: seatId,
+                      name: values.guest_name.trim(),
+                      email: values.guest_email?.trim() || undefined,
+                      phone: values.guest_phone?.trim() || undefined,
+                      age: values.guest_age?.trim() || null,
+                    },
+                  ]
+                : undefined;
+
               const result = await api('/api/admin/bookings', {
                 method: 'POST',
                 body: {
                   user_id: Number(values.user_id),
-                  seat_ids: [Number(values.seat_ids)],
+                  seat_ids: [seatId],
                   note: values.note || undefined,
                   concert_id: state.concertId,
+                  guests,
                 },
               });
               close();
@@ -1982,6 +2136,8 @@
             } catch (error) {
               if (error.details) showFieldErrors(form, error.details);
               UI.toastError('Could not create the booking', error.message);
+            } finally {
+              busy(button, false);
             }
           },
         },
@@ -2287,34 +2443,43 @@
   // Reports & export
   // ==========================================================================
 
+  /**
+   * The four reports, each available as CSV and as PDF.
+   *
+   * Both formats are server routes over one shared query per report
+   * (src/lib/exports.js), so a report's spreadsheet and its printout always
+   * carry the same columns and rows. They used to be built in two different
+   * places — the CSV on the server, the PDF from whatever happened to be on
+   * screen — which is why the booking and customer PDFs printed nothing at all.
+   *
+   * There is no Excel button. It emitted the same CSV with a byte-order mark, so
+   * presenting it as a third format promised a fidelity it did not have. The BOM
+   * is still written, which is the bit that made Excel read accented names.
+   */
   const REPORTS = [
     {
       key: 'bookings',
       title: 'Booking report',
-      body: 'Every booking with its reference, attendee, seat and status.',
+      body: 'Every seat with its guest, contact details, reference and status.',
       icon: 'ticket',
-      csv: '/api/admin/export/bookings.csv',
     },
     {
-      key: 'customers',
+      key: 'users',
       title: 'Customer report',
       body: 'Registered attendees, contact details and WhatsApp verification.',
       icon: 'users',
-      csv: '/api/admin/export/users.csv',
     },
     {
       key: 'concerts',
       title: 'Concert report',
       body: 'Each concert with its capacity, seats laid out and occupancy.',
       icon: 'music',
-      build: () => state.concerts,
     },
     {
       key: 'occupancy',
       title: 'Seat occupancy report',
-      body: 'Seat counts by status, per concert, for the current window.',
+      body: 'Seat counts by status, broken down by section.',
       icon: 'seat',
-      build: () => state.concerts,
     },
   ];
 
@@ -2409,27 +2574,20 @@
       const icon = el('span', { class: 'export-card__icon', 'aria-hidden': 'true' });
       paintIcon(icon, report.icon, '--export-icon');
 
-      const formats = el('div', { class: 'export-card__formats' });
-      formats.append(
+      const formats = el('div', { class: 'export-card__formats' }, [
         el('button', {
           class: 'btn btn--ghost btn--small',
           type: 'button',
           text: 'CSV',
-          onClick: () => exportReport(report, 'csv'),
-        }),
-        el('button', {
-          class: 'btn btn--ghost btn--small',
-          type: 'button',
-          text: 'Excel',
-          onClick: () => exportReport(report, 'excel'),
+          onClick: (event) => exportReport(report, 'csv', event.currentTarget),
         }),
         el('button', {
           class: 'btn btn--ghost btn--small',
           type: 'button',
           text: 'PDF',
-          onClick: () => exportReport(report, 'pdf'),
+          onClick: (event) => exportReport(report, 'pdf', event.currentTarget),
         }),
-      );
+      ]);
 
       box.append(
         el('article', { class: 'export-card' }, [
@@ -2443,227 +2601,39 @@
   }
 
   /**
-   * CSV comes from the server where an endpoint exists, and is built here from
-   * data already on screen where one does not. "Excel" is the same CSV with a
-   * BOM so Excel opens it as UTF-8 rather than mangling names; PDF hands the
-   * table to the browser's own print-to-PDF, which is honest about what it is
-   * rather than shipping a PDF writer for four tables.
-   */
-  function exportReport(report, format) {
-    if (report.csv && format === 'csv') {
-      window.open(report.csv, '_blank', 'noopener');
-      return;
-    }
-
-    const rows = report.build ? report.build() : [];
-    if (!rows.length) {
-      UI.toastError('Nothing to export', 'There is no data in the current window.');
-      return;
-    }
-
-    const columns = [
-      ['name', 'Concert'],
-      ['event_date', 'Date'],
-      ['venue', 'Venue'],
-      ['max_capacity', 'Capacity'],
-      ['total_seats', 'Seats laid out'],
-      ['booked_seats', 'Booked'],
-      ['available_seats', 'Available'],
-      ['reserved_seats', 'Held'],
-      ['blocked_seats', 'Blocked'],
-      ['parties', 'Parties'],
-      ['cancellations', 'Cancellations'],
-      ['occupancy', 'Occupancy %'],
-    ];
-
-    if (format === 'pdf') {
-      printReport(report, rows, columns);
-      return;
-    }
-
-    const csv = [
-      columns.map(([, label]) => label).join(','),
-      ...rows.map((row) =>
-        columns
-          .map(([key]) => {
-            const value = key === 'event_date' ? String(row[key]).slice(0, 10) : row[key];
-            const text = String(value ?? '');
-            return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-          })
-          .join(','),
-      ),
-    ].join('\r\n');
-
-    // The BOM is what makes Excel read this as UTF-8.
-    const blob = new Blob([format === 'excel' ? '﻿' : '', csv], {
-      type: 'text/csv;charset=utf-8',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = el('a', { href: url, download: `${report.key}-report.csv` });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    UI.toastSuccess('Export ready', `${report.title} downloaded.`);
-  }
-
-  /**
-   * A branded, print-ready report.
+   * Both formats are plain GETs, so they are handed to the browser rather than
+   * fetched and re-assembled here.
    *
-   * Built with DOM calls rather than innerHTML because the values come from the
-   * database — a concert someone named `<script>` would otherwise execute in
-   * the new window. Styling is a <style> element, which is fine: this is a
-   * document this script created, not one served under the site's CSP.
+   * CSV goes to the current tab as a download — the response carries
+   * Content-Disposition: attachment, so the page does not navigate away. PDF
+   * opens a print-ready page in a new tab, which is where the print dialog gets
+   * raised. A blocked pop-up is reported rather than silently doing nothing.
    */
-  function printReport(report, rows, columns) {
-    const win = window.open('', '_blank', 'width=1024,height=768');
-    if (!win) {
-      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to save a report as PDF.');
+  function exportReport(report, format, button) {
+    const params = new URLSearchParams();
+    if (state.reports.concertId) params.set('concert_id', state.reports.concertId);
+    const url = `/api/admin/export/${report.key}.${format}?${params}`;
+
+    if (format === 'csv') {
+      // An anchor rather than window.location: the download must not replace
+      // the console, and a same-tab navigation to an attachment is the one case
+      // browsers treat inconsistently.
+      const link = el('a', { href: url, download: '' });
+      document.body.append(link);
+      link.click();
+      link.remove();
+      UI.toastSuccess('Export started', `${report.title} is downloading as CSV.`);
       return;
     }
-    const doc = win.document;
-    doc.title = `${report.title} — ${state.admin?.full_name ? 'Night of Worship' : 'Report'}`;
 
-    const meta = doc.createElement('meta');
-    meta.setAttribute('charset', 'utf-8');
-    doc.head.append(meta);
-
-    const style = doc.createElement('style');
-    style.textContent = `
-      @page { size: A4 landscape; margin: 12mm; }
-      * { box-sizing: border-box; }
-      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body { margin: 0; padding: 28px 32px 40px; color: #0f172a; background: #fff;
-             font: 12.5px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-      .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
-              padding-bottom: 14px; margin-bottom: 20px; border-bottom: 3px solid #b58328; }
-      .brand { display: flex; align-items: center; gap: 12px; }
-      .brand img { width: 34px; height: 34px; }
-      .brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
-      .brand span { display: block; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: #b58328; }
-      h1 { margin: 14px 0 2px; font-size: 21px; letter-spacing: -.02em; }
-      .lede { margin: 0; font-size: 12px; color: #64748b; max-width: 80ch; }
-      .stamp { text-align: right; font-size: 10.5px; color: #64748b; line-height: 1.7; }
-      .stamp b { display: block; color: #0f172a; font-size: 12px; }
-      table { border-collapse: collapse; width: 100%; margin-top: 18px; }
-      thead { display: table-header-group; }
-      th { text-align: left; padding: 9px 10px; background: #16233d; color: #fff;
-           font-size: 9.5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
-      th:first-child { border-radius: 6px 0 0 0; }
-      th:last-child { border-radius: 0 6px 0 0; }
-      td { padding: 8px 10px; border-bottom: 1px solid #e6eaf0; }
-      tbody tr:nth-child(even) td { background: #fbfcfd; }
-      tbody tr { page-break-inside: avoid; }
-      .num { text-align: right; font-variant-numeric: tabular-nums; }
-      .foot { margin-top: 22px; padding-top: 12px; border-top: 1px solid #e6eaf0;
-              display: flex; justify-content: space-between; font-size: 10px; color: #64748b; }
-      .free { color: #b58328; font-weight: 700; }
-      @media print { .noprint { display: none; } }
-    `;
-    doc.head.append(style);
-
-    // --- Header ---
-    const head = doc.createElement('div');
-    head.className = 'head';
-
-    const left = doc.createElement('div');
-    const brand = doc.createElement('div');
-    brand.className = 'brand';
-    const logo = doc.createElement('img');
-    logo.src = `${window.location.origin}/assets/logo.svg`;
-    logo.alt = '';
-    const words = doc.createElement('div');
-    const b = doc.createElement('b');
-    b.textContent = 'Night of Worship';
-    const sp = doc.createElement('span');
-    sp.textContent = 'Concert management';
-    words.append(b, sp);
-    brand.append(logo, words);
-
-    const h1 = doc.createElement('h1');
-    h1.textContent = report.title;
-    const lede = doc.createElement('p');
-    lede.className = 'lede';
-    lede.textContent = report.body;
-    left.append(brand, h1, lede);
-
-    const stamp = doc.createElement('div');
-    stamp.className = 'stamp';
-    const when = doc.createElement('b');
-    when.textContent = new Date().toLocaleDateString(undefined, {
-      day: 'numeric', month: 'long', year: 'numeric',
-    });
-    stamp.append(when);
-    stamp.append(doc.createTextNode(`Generated ${new Date().toLocaleTimeString()}`));
-    stamp.append(doc.createElement('br'));
-    stamp.append(doc.createTextNode(`By ${state.admin?.full_name || 'the console'}`));
-    stamp.append(doc.createElement('br'));
-    stamp.append(doc.createTextNode(`${rows.length} row${rows.length === 1 ? '' : 's'}`));
-
-    head.append(left, stamp);
-
-    // --- Table ---
-    const table = doc.createElement('table');
-    const thead = doc.createElement('thead');
-    const headRow = doc.createElement('tr');
-    for (const [key, label] of columns) {
-      const th = doc.createElement('th');
-      th.textContent = label;
-      if (NUMERIC_COLUMNS.has(key)) th.className = 'num';
-      headRow.append(th);
+    const win = window.open(url, '_blank', 'noopener');
+    if (!win) {
+      UI.toastError('Pop-up blocked', 'Allow pop-ups for this site to open a report as PDF.');
+      return;
     }
-    thead.append(headRow);
-
-    const tbody = doc.createElement('tbody');
-    for (const row of rows) {
-      const tr = doc.createElement('tr');
-      for (const [key] of columns) {
-        const td = doc.createElement('td');
-        if (NUMERIC_COLUMNS.has(key)) td.className = 'num';
-        td.textContent =
-          key === 'event_date'
-            ? formatDate(row[key])
-            : key === 'occupancy'
-              ? `${row[key]}%`
-              : String(row[key] ?? '');
-        tr.append(td);
-      }
-      tbody.append(tr);
-    }
-    table.append(thead, tbody);
-
-    // --- Footer ---
-    const foot = doc.createElement('div');
-    foot.className = 'foot';
-    const freeNote = doc.createElement('span');
-    freeNote.append(doc.createTextNode('Admission is free — this report contains no financial data. '));
-    const em = doc.createElement('span');
-    em.className = 'free';
-    em.textContent = 'No payments are ever collected.';
-    freeNote.append(em);
-    const src = doc.createElement('span');
-    src.textContent = window.location.origin;
-    foot.append(freeNote, src);
-
-    doc.body.append(head, table, foot);
-
-    // Printing before the logo has decoded gives a report with a hole in it.
-    const go = () => {
-      win.focus();
-      win.print();
-    };
-    if (logo.complete) go();
-    else {
-      logo.addEventListener('load', go);
-      logo.addEventListener('error', go);
-    }
+    UI.toastSuccess('Report opened', 'Choose “Save as PDF” in the print dialog.');
+    if (button) busy(button, false);
   }
-
-  /** Columns that should sit right-aligned and tabular in a printed report. */
-  const NUMERIC_COLUMNS = new Set([
-    'max_capacity', 'total_seats', 'booked_seats', 'available_seats',
-    'reserved_seats', 'blocked_seats', 'parties', 'cancellations', 'occupancy',
-  ]);
 
   // ==========================================================================
   // Settings
@@ -2675,11 +2645,19 @@
     email: renderEmailSettings,
     whatsapp: renderWhatsappSettings,
     security: renderSecuritySettings,
+    staff: renderStaffSettings,
   };
 
   async function loadSettings() {
     const { settings } = await api('/api/admin/settings');
     state.settings = settings;
+
+    // Managing other people's logins is SUPER_ADMIN work, so the tab is only
+    // there for one. The server enforces it either way — this is so an ADMIN is
+    // not shown a screen that would only ever return 403.
+    $$('[data-super-only]').forEach((node) => {
+      node.hidden = state.admin?.role !== 'SUPER_ADMIN';
+    });
 
     once('settings:nav', () => {
       $$('[data-settings-nav] button').forEach((button) => {
@@ -2948,6 +2926,293 @@
     ]);
 
   // ==========================================================================
+  // Staff accounts
+  //
+  // Creating a login used to mean shell access and `npm run seed:admin`, which
+  // is no use to a vicar making a steward a login the afternoon before a
+  // concert. SUPER_ADMIN only; the server enforces the same thing.
+  // ==========================================================================
+
+  const ROLE_COPY = {
+    SUPER_ADMIN: {
+      label: 'Super admin',
+      tone: 'chip--gold',
+      blurb: 'The whole console, and can create, change and remove other logins.',
+    },
+    ADMIN: {
+      label: 'Admin',
+      tone: 'chip--ok',
+      blurb: 'The whole console — concerts, seats, bookings, exports — but cannot manage logins.',
+    },
+    STAFF: {
+      label: 'Door staff',
+      tone: 'chip--neutral',
+      blurb: 'Door check-in, and printing a ticket or a hand band. Nothing else.',
+    },
+  };
+
+  async function renderStaffSettings() {
+    const box = $('[data-settings-body]');
+    box.textContent = '';
+
+    const list = el('div', { class: 'stack' }, [
+      el('p', { class: 'field__hint', text: 'Loading accounts…' }),
+    ]);
+
+    box.append(
+      settingsCard(
+        'Staff accounts',
+        'Who can sign in to this console, and how much of it they get.',
+        el('dl', { class: 'facts' }, [
+          fact('Super admin', ROLE_COPY.SUPER_ADMIN.blurb),
+          fact('Admin', ROLE_COPY.ADMIN.blurb),
+          fact('Door staff', ROLE_COPY.STAFF.blurb),
+        ]),
+        staffCreateForm(() => loadStaffList(list)),
+      ),
+      settingsCard('Existing logins', null, list),
+    );
+    enhanceFields(box);
+    loadStaffList(list);
+  }
+
+  function staffCreateForm(onCreated) {
+    const form = el('form', { class: 'form-narrow' }, [
+      el('div', { class: 'field' }, [
+        el('label', { for: 'staff_name', text: 'Full name' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'user', 'aria-hidden': 'true' }),
+          el('input', { id: 'staff_name', name: 'full_name', type: 'text', autocomplete: 'off', required: true }),
+        ]),
+        el('span', { class: 'field__error', 'data-error-for': 'full_name' }),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'staff_email', text: 'Email address' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'mail', 'aria-hidden': 'true' }),
+          el('input', { id: 'staff_email', name: 'email', type: 'email', autocomplete: 'off', required: true }),
+        ]),
+        el('p', { class: 'field__hint', text: 'This is the username they sign in with.' }),
+        el('span', { class: 'field__error', 'data-error-for': 'email' }),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'staff_role', text: 'Access' }),
+        el('select', { id: 'staff_role', name: 'role' }, [
+          el('option', { value: 'STAFF', selected: true, text: 'Door staff — check-in only' }),
+          el('option', { value: 'ADMIN', text: 'Admin — the whole console' }),
+        ]),
+        el('span', { class: 'field__error', 'data-error-for': 'role' }),
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { for: 'staff_password', text: 'Temporary password' }),
+        el('span', { class: 'field__control field__control--inline' }, [
+          el('span', { class: 'field__icon', 'data-icon': 'key', 'aria-hidden': 'true' }),
+          el('input', {
+            id: 'staff_password',
+            name: 'password',
+            type: 'password',
+            autocomplete: 'new-password',
+            required: true,
+          }),
+        ]),
+        el('p', {
+          class: 'field__hint',
+          text:
+            'At least 10 characters with an uppercase letter, a lowercase letter and a number. ' +
+            'Tell it to them in person — it is not emailed, and they can change it once they are in.',
+        }),
+        el('span', { class: 'field__error', 'data-error-for': 'password' }),
+      ]),
+    ]);
+
+    const save = el('button', {
+      class: 'btn btn--primary btn--small',
+      type: 'submit',
+      text: 'Create login',
+    });
+    form.append(save);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      showFieldErrors(form, {});
+      busy(save, true, 'Creating…');
+      try {
+        const { admin } = await api('/api/admin/staff', { method: 'POST', body: formValues(form) });
+        UI.toastSuccess(
+          'Login created',
+          `${admin.email} can sign in at /admin/login.html as ${ROLE_COPY[admin.role].label.toLowerCase()}.`,
+        );
+        form.reset();
+        onCreated();
+      } catch (error) {
+        if (error.details) showFieldErrors(form, error.details);
+        UI.toastError('Could not create the login', error.message);
+      } finally {
+        busy(save, false);
+      }
+    });
+
+    return form;
+  }
+
+  async function loadStaffList(box) {
+    try {
+      const { admins, me } = await api('/api/admin/staff');
+      box.textContent = '';
+      box.append(staffTable(admins, me, () => loadStaffList(box)));
+    } catch (error) {
+      box.textContent = '';
+      box.append(el('p', { class: 'field__hint', text: `Could not load accounts: ${error.message}` }));
+    }
+  }
+
+  function staffTable(admins, me, reload) {
+    const head = el('tr', {}, [
+      el('th', { text: 'Person' }),
+      el('th', { text: 'Access' }),
+      el('th', { text: 'Last signed in' }),
+      el('th', { text: 'Added by' }),
+      el('th', { class: 'u-right', text: 'Actions' }),
+    ]);
+
+    const body = el('tbody');
+    for (const row of admins) {
+      const role = ROLE_COPY[row.role] || { label: row.role, tone: 'chip--neutral' };
+      const isSelf = row.id === me;
+
+      body.append(
+        el('tr', {}, [
+          el('td', {}, [
+            el('span', { class: 'data-table__strong', text: row.full_name }),
+            el('span', { class: 'data-table__sub', text: row.email }),
+          ]),
+          el('td', {}, [
+            el('span', { class: `chip ${role.tone}`, text: role.label }),
+            row.is_active ? null : el('span', { class: 'chip chip--off', text: 'Disabled' }),
+          ]),
+          el('td', {
+            class: 'u-nowrap',
+            text: row.last_login_at ? formatShortDate(row.last_login_at) : 'Never',
+          }),
+          el('td', { text: isSelf ? 'You' : row.created_by_name || '—' }),
+          el('td', {}, [
+            el(
+              'div',
+              { class: 'data-table__actions' },
+              // Your own row gets no controls at all. Every one of them is a way
+              // to lock yourself out of the screen you would need to undo it,
+              // and the server refuses them anyway — better not to offer.
+              isSelf
+                ? [el('span', { class: 'data-table__sub', text: 'Your account' })]
+                : [
+                    iconButton('key', 'Set a new password', () => resetStaffPassword(row, reload)),
+                    iconButton(
+                      row.is_active ? 'eye-off' : 'eye',
+                      row.is_active ? 'Disable this login' : 'Enable this login',
+                      () => toggleStaff(row, reload),
+                    ),
+                    iconButton('shield', 'Change access level', () => changeStaffRole(row, reload)),
+                    iconButton('trash', 'Delete this login', () => deleteStaff(row, reload)),
+                  ],
+            ),
+          ]),
+        ]),
+      );
+    }
+
+    return el('div', { class: 'data-table-wrap' }, [
+      el('table', { class: 'data-table' }, [el('thead', {}, [head]), body]),
+    ]);
+  }
+
+  async function patchStaff(row, body, reload, success) {
+    try {
+      await api(`/api/admin/staff/${row.id}`, { method: 'PATCH', body });
+      UI.toastSuccess(success);
+      reload();
+    } catch (error) {
+      UI.toastError('Could not change that account', error.message);
+    }
+  }
+
+  function toggleStaff(row, reload) {
+    return patchStaff(
+      row,
+      { is_active: !row.is_active },
+      reload,
+      row.is_active ? `${row.email} can no longer sign in` : `${row.email} can sign in again`,
+    );
+  }
+
+  async function changeStaffRole(row, reload) {
+    // Least authority first, so the list does not read as a promotion ladder
+    // with "super admin" as the obvious end of it.
+    const next = await UI.prompt({
+      title: `Access for ${row.full_name}`,
+      message: `Currently ${ROLE_COPY[row.role].label.toLowerCase()}. Changing this signs them out of every device they are signed in on.`,
+      label: 'Access level',
+      value: row.role,
+      options: ['STAFF', 'ADMIN', 'SUPER_ADMIN'].map((key) => ({
+        value: key,
+        label: `${ROLE_COPY[key].label} — ${ROLE_COPY[key].blurb}`,
+      })),
+      confirmLabel: 'Change access',
+    });
+    if (!next || next === row.role) return;
+
+    return patchStaff(
+      row,
+      { role: next },
+      reload,
+      `${row.email} is now ${ROLE_COPY[next].label.toLowerCase()}`,
+    );
+  }
+
+  async function resetStaffPassword(row, reload) {
+    const password = await UI.prompt({
+      title: `New password for ${row.full_name}`,
+      message:
+        'At least 10 characters with an uppercase letter, a lowercase letter and a number. ' +
+        'Every session they have open is signed out.',
+      label: 'New password',
+      type: 'password',
+      confirmLabel: 'Set password',
+    });
+    if (!password) return;
+
+    try {
+      const result = await api(`/api/admin/staff/${row.id}/password`, {
+        method: 'POST',
+        body: { new_password: password },
+      });
+      UI.toastSuccess('Password set', result.message);
+      reload();
+    } catch (error) {
+      UI.toastError('Could not set the password', error.message);
+    }
+  }
+
+  async function deleteStaff(row, reload) {
+    const ok = await UI.confirm({
+      title: `Delete ${row.full_name}?`,
+      message:
+        `${row.email} will not be able to sign in again. Anything they did stays in the audit ` +
+        'log. Disabling the login instead keeps it, in case they are back next season.',
+      confirmLabel: 'Delete login',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      const result = await api(`/api/admin/staff/${row.id}`, { method: 'DELETE' });
+      UI.toastSuccess('Login deleted', result.message);
+      reload();
+    } catch (error) {
+      UI.toastError('Could not delete that account', error.message);
+    }
+  }
+
+  // ==========================================================================
   // Utilities
   // ==========================================================================
 
@@ -2969,6 +3234,14 @@
       state.admin = admin;
     } catch {
       window.location.href = '/admin/login.html';
+      return;
+    }
+
+    // A door-staff login can reach /api/admin/me and nothing else in here, so
+    // the console would paint itself and then fill with 403s. Send them to the
+    // one screen their role is for instead.
+    if (state.admin.role === 'STAFF') {
+      window.location.replace('/checkin.html');
       return;
     }
 

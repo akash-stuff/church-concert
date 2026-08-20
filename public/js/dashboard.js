@@ -1,6 +1,7 @@
 'use strict';
 
 (async function initDashboard() {
+  const UI = window.UI;
   const {
     api,
     $,
@@ -164,7 +165,8 @@
         }),
       );
 
-      const ticketUrl = `/api/bookings/mine/confirmation?reference=${encodeURIComponent(party.booking_reference)}`;
+      const reference = encodeURIComponent(party.booking_reference);
+      const ticketUrl = `/api/bookings/mine/confirmation?reference=${reference}`;
       const actions = el('div', { class: 'btn-row' }, [
         el('a', {
           class: 'btn btn--primary btn--small',
@@ -206,42 +208,65 @@
 
   async function cancelParty(event, party) {
     const seats = party.seats.map((seat) => seat.seat_number).join(', ');
-    const confirmed = window.confirm(
-      party.seats.length === 1
-        ? `Release seat ${seats}? Somebody else may take it, and there is no guarantee you can get it back.`
-        : `Release all ${party.seats.length} seats (${seats}) for ${party.concert.name}? Somebody else may take them.`,
-    );
+    // Captured before the await: once the dialog has been awaited the event has
+    // finished dispatching and currentTarget is null.
+    const button = event.currentTarget;
+
+    // An in-app dialog rather than window.confirm: the browser's own box cannot
+    // be branded, is suppressed outright in some embedded webviews, and freezes
+    // the page while it is open.
+    const confirmed = await UI.confirm({
+      title: party.seats.length === 1 ? 'Release this seat?' : 'Release all these seats?',
+      message:
+        party.seats.length === 1
+          ? `Seat ${seats} goes back into the pool straight away. Somebody else may take it, and there is no guarantee you can get it back.`
+          : `All ${party.seats.length} seats (${seats}) for ${party.concert.name} go back into the pool straight away. Somebody else may take them.`,
+      confirmLabel: party.seats.length === 1 ? 'Release seat' : 'Release all seats',
+      cancelLabel: 'Keep them',
+      danger: true,
+    });
     if (!confirmed) return;
 
     clearNotice('[data-notice]');
-    busy(event.currentTarget, true, 'Releasing…');
+    busy(button, true, 'Releasing…');
     try {
       const result = await api(
         `/api/bookings/mine/${encodeURIComponent(party.booking_reference)}`,
         { method: 'DELETE' },
       );
-      notify('[data-notice]', result.message, 'success');
+      UI.toastSuccess('Seats released', result.message);
       await refresh();
     } catch (error) {
+      UI.toastError('Could not release the seats', error.message);
       notify('[data-notice]', error.message, 'error');
-      busy(event.currentTarget, false);
+      busy(button, false);
     }
   }
 
   async function releaseSeat(event, party, seat) {
-    if (!window.confirm(`Release just seat ${seat.seat_number}? The rest of your party keeps theirs.`)) {
-      return;
-    }
+    const button = event.currentTarget;
+    const confirmed = await UI.confirm({
+      title: `Release seat ${seat.seat_number}?`,
+      message: `The rest of your party keeps theirs. Seat ${seat.seat_number} goes back into the pool straight away.`,
+      confirmLabel: 'Release this seat',
+      cancelLabel: 'Keep it',
+      danger: true,
+    });
+    if (!confirmed) return;
+
     clearNotice('[data-notice]');
+    busy(button, true, 'Releasing…');
     try {
       const result = await api(
         `/api/bookings/mine/${encodeURIComponent(party.booking_reference)}?seat_id=${seat.seat_id}`,
         { method: 'DELETE' },
       );
-      notify('[data-notice]', result.message, 'success');
+      UI.toastSuccess('Seat released', result.message);
       await refresh();
     } catch (error) {
+      UI.toastError('Could not release the seat', error.message);
       notify('[data-notice]', error.message, 'error');
+      busy(button, false);
     }
   }
 

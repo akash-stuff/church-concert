@@ -261,7 +261,7 @@ router.post(
   auth.requireUser,
   auth.requireVerifiedUser,
   asyncRoute(async (req, res) => {
-    const { concert_id: concertId, seat_ids: seatIds } = parse(
+    const { concert_id: concertId, seat_ids: seatIds, guests } = parse(
       schemas.createBookingSchema,
       req.body,
     );
@@ -275,6 +275,7 @@ router.post(
       userId: req.user.id,
       concertId: target.id,
       seatIds,
+      guests,
     });
 
     const seatNumbers = result.seats.map((seat) => seat.seat_number);
@@ -430,6 +431,23 @@ router.delete(
 );
 
 /**
+ * Which of the signed-in attendee's parties a printable document is about.
+ *
+ * `?reference=` picks one; without it, the next concert coming up. The
+ * candidates only ever come from this user's own rows, so the parameter cannot
+ * be pointed at somebody else's reference.
+ */
+async function ownParty(req) {
+  const parties = await bookingService.getUserBookings(req.user.id);
+  if (!parties.length) throw notFound('You have not booked a seat yet.', 'NO_BOOKING');
+
+  const wanted = req.query.reference ? String(req.query.reference).trim() : null;
+  const party = wanted ? parties.find((item) => item.booking_reference === wanted) : parties[0];
+  if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+  return party;
+}
+
+/**
  * Printable confirmation, server-rendered so it works without JavaScript.
  * `?reference=` picks a party; without it, the next concert coming up.
  */
@@ -437,14 +455,7 @@ router.get(
   '/bookings/mine/confirmation',
   auth.requireUser,
   asyncRoute(async (req, res) => {
-    const parties = await bookingService.getUserBookings(req.user.id);
-    if (!parties.length) throw notFound('You have not booked a seat yet.', 'NO_BOOKING');
-
-    const wanted = req.query.reference ? String(req.query.reference).trim() : null;
-    const party = wanted
-      ? parties.find((item) => item.booking_reference === wanted)
-      : parties[0];
-    if (!party) throw notFound('No live booking has that reference.', 'NO_BOOKING');
+    const party = await ownParty(req);
 
     // ?print=1 opens the print dialog on load, which is what the "Download PDF"
     // links point at; without it the page is a readable preview.
@@ -453,5 +464,6 @@ router.get(
     );
   }),
 );
+
 
 module.exports = { router, publicConcert };

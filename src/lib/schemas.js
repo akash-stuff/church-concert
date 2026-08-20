@@ -112,23 +112,68 @@ const seatIdList = z
   .min(1, 'Choose at least one seat.')
   .max(25, 'That is more than 25 seats in one booking.');
 
+/**
+ * Who is sitting in one seat.
+ *
+ * `seat_id` is carried on the guest rather than inferred from array position.
+ * The booking service sorts seats into ascending id order before it locks them
+ * — that ordering is what makes concurrent multi-seat requests deadlock-free —
+ * so anything matched up by index would silently attach the wrong person to the
+ * wrong seat as soon as the client sent seats out of order. Naming the seat
+ * makes the pairing explicit and order-independent.
+ *
+ * Age is optional and capped at 17 nowhere: an adult may volunteer it. What
+ * matters is that a minor's age can be recorded, and that leaving it blank is
+ * allowed for everyone.
+ */
+const guestSchema = z.object({
+  seat_id: z.coerce.number().int().positive(),
+  name: trimmed(2, 120),
+  email,
+  phone,
+  /* Blanks are normalised to null *before* any coercion. A union with
+     z.coerce.number() first cannot do this: an empty field arrives as '' from a
+     form, Number('') is 0, and 0 is a valid age — so "not given" would silently
+     become "newborn". */
+  age: z.preprocess(
+    (value) => (value === '' || value === undefined ? null : value),
+    z.coerce.number().int().min(0).max(120).nullable(),
+  ),
+});
+
 const createBookingSchema = z
   .object({
     concert_id: z.coerce.number().int().positive().optional(),
     seat_ids: z.union([seatIdList, z.coerce.number().int().positive()]).optional(),
     seat_id: z.coerce.number().int().positive().optional(),
+    guests: z.array(guestSchema).max(20).optional(),
   })
   .transform((data) => {
     const ids = data.seat_ids ?? data.seat_id;
+    const seatIds = Array.isArray(ids) ? ids : ids === undefined ? [] : [ids];
     return {
       concert_id: data.concert_id ?? null,
-      seat_ids: Array.isArray(ids) ? ids : ids === undefined ? [] : [ids],
+      // Guests may stand in for seat_ids entirely, so a client that collected
+      // details per seat does not have to send the same ids twice.
+      seat_ids: seatIds.length ? seatIds : (data.guests || []).map((g) => g.seat_id),
+      guests: data.guests ?? null,
     };
   })
   .refine((data) => data.seat_ids.length > 0, {
     message: 'Choose at least one seat.',
     path: ['seat_ids'],
-  });
+  })
+  .refine(
+    (data) =>
+      !data.guests ||
+      (data.guests.length === data.seat_ids.length &&
+        new Set(data.guests.map((g) => g.seat_id)).size === data.guests.length &&
+        data.guests.every((g) => data.seat_ids.includes(g.seat_id))),
+    {
+      message: 'Give details for each seat, once per seat.',
+      path: ['guests'],
+    },
+  );
 
 const concertSchema = z.object({
   name: trimmed(2, 190).optional(),
@@ -221,6 +266,48 @@ const adminUserUpdateSchema = z
   })
   .refine((d) => Object.keys(d).length > 0, { message: 'Nothing to update.' });
 
+/**
+ * A new console login, created from Settings → Staff accounts.
+ *
+ * `role` excludes SUPER_ADMIN on purpose. Handing out the role that can create
+ * and delete other accounts is not something to do through a form field on a
+ * list screen; promoting somebody is a separate, deliberate PATCH.
+ *
+ * The password rule is the shared `password` above rather than a stricter one,
+ * so the message a steward sees setting theirs matches what the sign-in page
+ * and the reset flow tell everybody else. scripts/seed-admin.js still holds the
+ * first account to twelve characters, since that one is created unattended and
+ * is the account that can create all the others.
+ */
+const adminAccountCreateSchema = z.object({
+  full_name: trimmed(2, 120),
+  email,
+  password,
+  role: z.enum(['ADMIN', 'STAFF']).default('STAFF'),
+});
+
+/**
+ * Changing an existing login. Every field optional, because the three things
+ * this is used for — rename, re-role, enable/disable — arrive one at a time
+ * from three different controls.
+ *
+ * Password is not here. Resetting somebody else's password is a distinct act
+ * with a distinct consequence (it signs out every session they have), so it has
+ * its own endpoint rather than hiding inside a general update.
+ */
+const adminAccountUpdateSchema = z
+  .object({
+    full_name: trimmed(2, 120).optional(),
+    role: z.enum(['SUPER_ADMIN', 'ADMIN', 'STAFF']).optional(),
+    is_active: booleanish.optional(),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: 'Nothing to update.' });
+
+/** A super admin setting somebody else's password. */
+const adminPasswordResetSchema = z.object({
+  new_password: password,
+});
+
 const adminBookingCreateSchema = z
   .object({
     user_id: z.coerce.number().int().positive(),
@@ -228,20 +315,40 @@ const adminBookingCreateSchema = z
     seat_ids: z.union([seatIdList, z.coerce.number().int().positive()]).optional(),
     seat_id: z.coerce.number().int().positive().optional(),
     note: z.string().trim().max(255).nullish(),
+    // Optional here, unlike the attendee flow: staff booking a seat over the
+    // phone often have a name and nothing else, and refusing the booking until
+    // they have an email address for a walk-in helps nobody. Whatever is given
+    // is recorded; the rest falls back to the account holder.
+    guests: z.array(guestSchema.partial({ email: true, phone: true })).max(20).optional(),
   })
   .transform((data) => {
     const ids = data.seat_ids ?? data.seat_id;
+    const seatIds = Array.isArray(ids) ? ids : ids === undefined ? [] : [ids];
     return {
       user_id: data.user_id,
       concert_id: data.concert_id ?? null,
-      seat_ids: Array.isArray(ids) ? ids : ids === undefined ? [] : [ids],
+      seat_ids: seatIds.length ? seatIds : (data.guests || []).map((g) => g.seat_id),
       note: data.note ?? null,
+      guests: data.guests ?? null,
     };
   })
   .refine((data) => data.seat_ids.length > 0, {
     message: 'Choose at least one seat.',
     path: ['seat_ids'],
   });
+
+/** Correcting the guest on a seat that is already booked. */
+const guestUpdateSchema = z
+  .object({
+    guest_name: trimmed(2, 120).optional(),
+    guest_email: email.nullish(),
+    guest_phone: phone.nullish(),
+    guest_age: z.preprocess(
+      (value) => (value === '' || value === undefined ? null : value),
+      z.coerce.number().int().min(0).max(120).nullable(),
+    ),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: 'Nothing to update.' });
 
 const adminBookingUpdateSchema = z.object({
   seat_id: z.coerce.number().int().positive(),
@@ -288,6 +395,8 @@ module.exports = {
   changePasswordSchema,
   updateProfileSchema,
   createBookingSchema,
+  guestSchema,
+  guestUpdateSchema,
   concertSchema,
   concertCreateSchema,
   sectionSchema,
@@ -295,6 +404,9 @@ module.exports = {
   seatUpdateSchema,
   bulkSeatSchema,
   adminUserUpdateSchema,
+  adminAccountCreateSchema,
+  adminAccountUpdateSchema,
+  adminPasswordResetSchema,
   adminBookingCreateSchema,
   adminBookingUpdateSchema,
   cancelBookingSchema,

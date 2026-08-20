@@ -72,7 +72,19 @@ function el(tag, attrs = {}, children = []) {
     if (value === null || value === undefined || value === false) continue;
     if (key === 'class') node.className = value;
     else if (key === 'text') node.textContent = value;
-    else if (key.startsWith('on') && typeof value === 'function') {
+    else if (key === 'style') {
+      /* Applied through the CSSOM, never as a style attribute.
+       *
+       * The CSP is style-src 'self' with no 'unsafe-inline', which covers
+       * style-src-attr too — so setAttribute('style', ...) is dropped by the
+       * browser and the declaration silently does nothing. Assigning cssText is
+       * a CSSOM write, which CSP does not police, so it actually applies.
+       *
+       * This used to be a setAttribute like everything else, which is why the
+       * home page's occupancy gauges rendered empty: the width was there in the
+       * markup and ignored by the browser. */
+      node.style.cssText = String(value);
+    } else if (key.startsWith('on') && typeof value === 'function') {
       node.addEventListener(key.slice(2).toLowerCase(), value);
     } else node.setAttribute(key, value === true ? '' : String(value));
   }
