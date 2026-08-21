@@ -1,41 +1,71 @@
 /* ===========================================================================
    Church concerts — seat registration
-   Blue on white: a bright, plain-spoken booking site. One saturated blue does
-   all the persuading (primary buttons, the chosen seat, live figures); every
-   other surface is white or a pale wash of that same blue, so the seat map is
-   the busiest thing on any screen.
+   Violet on deep navy, over soft neutral. The navy carries the structure —
+   sidebar, stage, chrome — and a single violet does all the persuading:
+   primary actions, the selected seat, the active nav item, the figure that
+   matters. Everything else is white or a neutral wash, so the seat map and the
+   console tables stay the busiest thing on any screen.
 
    Illustrations and icons live in /assets and are referenced by URL only, so
-   the palette below stays the single place colour is decided.
+   the palette below stays the single place colour is decided. These values are
+   the "Night of Worship — UI 2.0" foundations and are mirrored as Figma
+   variables, so a token renamed here has to be renamed there too.
    =========================================================================== */
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* Surfaces, lightest to deepest. */
+  /* Surfaces, lightest to deepest. A faint navy cast in the neutrals is what
+     lets a plain white card read as lifted without a heavy shadow. */
   --surface: #ffffff;      /* cards, inputs, seats */
-  --page: #f5f8ff;         /* the page itself */
-  --wash: #eff6ff;         /* tinted panels, table heads, hover */
-  --wash-strong: #dbeafe;  /* gauges, swatches, the stage */
-  --line: #e5eaf4;         /* borders */
-  --line-strong: #cbd5e1;
+  --surface-2: #fbfcfd;    /* nested panels inside a card */
+  --page: #f5f6fa;         /* the page itself */
+  --wash: #eef1f6;         /* tinted panels, table heads, hover */
+  --wash-strong: #dfe4ec;  /* gauges, swatches */
+  --line: #e6eaf0;         /* borders */
+  --line-strong: #ccd3de;
 
   /* Text. */
   --ink: #0f172a;          /* headings */
-  --body-ink: #334155;     /* reading copy */
+  --body-ink: #3d4757;     /* reading copy */
   --muted: #64748b;        /* labels and hints; 4.8:1 on white */
 
-  /* Accents. */
-  --brand: #2563eb;        /* primary action, selection */
-  --brand-dark: #1d4ed8;   /* hover, headline accent */
-  --brand-light: #3b82f6;
+  /* Deep navy is structure, not highlight: masthead, sidebar, stage. */
+  --brand: #1b1e3d;
+  --brand-dark: #12142c;   /* hover, headline accent */
+  --brand-light: #2d3160;
   --on-brand: #ffffff;
-  --ok: #16a34a;           /* confirmed, verified */
-  --ok-wash: #dcfce7;
-  --warn: #d97706;         /* held seats, pending */
-  --warn-wash: #fef3c7;
-  --danger: #dc2626;
-  --danger-wash: #fee2e2;
+
+  /* Violet is rationed — primary buttons, the active nav item, selected seats,
+     the one metric that matters. It never carries meaning alone; every violet
+     state is labelled or shaped as well as coloured. */
+  --accent: #6d28d9;
+  --accent-strong: #5b21b6;
+  --accent-light: #8b5cf6;
+  --accent-wash: #f5f3ff;
+  --accent-line: #ddd6fe;
+  --accent-on-dark: #a78bfa;  /* 5.9:1 on --brand; --accent-light is only 3.8 */
+  --on-accent: #ffffff;
+
+  /* Status. */
+  /* Each status has three jobs and needs three values: the colour itself for
+     marks and borders, a wash to sit on, and an ink dark enough to read as body
+     text on that wash. --ok on --ok-wash is only 4.4:1, which is why the ink is
+     a separate token rather than the same colour reused. */
+  --ok: #12805a;           /* confirmed, verified */
+  --ok-wash: #e3f6ee;
+  --ok-line: #b7e4d2;
+  --ok-ink: #0b5c40;       /* 7.1:1 on --ok-wash */
+  --warn: #a86412;         /* held seats, pending */
+  --warn-wash: #fdf1dd;
+  --warn-line: #f0d5a8;
+  --warn-ink: #7a4708;     /* 6.9:1 on --warn-wash */
+  --danger: #b3253a;
+  --danger-wash: #fdeaed;
+  --danger-line: #f2c2ca;
+  --danger-ink: #8f1c2e;
+  --info: #4f46e5;
+  --info-wash: #eef2ff;
 
   --display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --body: 'Inter', system-ui, -apple-system, sans-serif;
@@ -48,13 +78,47 @@
   --step3: 2rem;
   --step4: 2.75rem;
 
-  --gap: 1.25rem;
-  --radius: 10px;
+  /* The named text styles from the Figma "Type" foundation. Line heights are
+     unitless and tracking is in em, so a step keeps its proportions wherever
+     the page picks a different size (the hero headline clamps, for instance). */
+  --lh-display: 1.05;   /* Display/44 */
+  --lh-h1: 1.15;        /* Heading/32 */
+  --lh-h2: 1.22;        /* Heading/24 */
+  --lh-h3: 1.3;         /* Heading/18 */
+  --lh-h4: 1.35;        /* Heading/15 */
+  --lh-metric: 1;       /* Metric/28  */
+  --lh-body: 1.6;       /* Body/15    */
+  --lh-label: 1.4;      /* Label/13   */
+  --lh-caption: 1.45;   /* Caption/12 */
+  --lh-chip: 1.2;       /* Chip/11, Eyebrow/11 */
+  --lh-mono: 1.3;       /* Mono/14    */
+
+  --ls-display: -0.015em;
+  --ls-h1: -0.01em;
+  --ls-h2: -0.008em;
+  --ls-h3: -0.004em;
+  --ls-metric: -0.006em;
+  --ls-chip: 0.03em;
+  --ls-eyebrow: 0.18em;
+  --ls-mono: 0.03em;
+
+  --gap: 1.5rem;
+
+  /* The page shell. 90% of the viewport rather than a fixed column, so the
+     seat map and the console tables get the width they actually want. The
+     narrow variant is untouched: a sign-in form 1700px wide is not a form. */
+  --shell: 90%;
+
+  --radius-sm: 8px;
+  --radius: 12px;
   --radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 26px -18px rgba(15, 23, 42, 0.35);
-  --shadow-lift: 0 2px 6px rgba(15, 23, 42, 0.06), 0 24px 48px -28px rgba(29, 78, 216, 0.45);
-  --focus: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.28);
+  --shadow-lift: 0 2px 6px rgba(15, 23, 42, 0.06), 0 20px 44px -24px rgba(15, 23, 42, 0.34);
+  --focus: 0 0 0 3px rgba(109, 40, 217, 0.32);
 }
 
 *,
@@ -84,20 +148,25 @@ h2,
 h3 {
   font-family: var(--display);
   font-weight: 700;
-  line-height: 1.18;
   color: var(--ink);
   margin: 0 0 0.4em;
-  letter-spacing: -0.02em;
 }
 
 h1 {
   font-size: var(--step3);
+  line-height: var(--lh-h1);
+  letter-spacing: var(--ls-h1);
 }
 h2 {
   font-size: var(--step2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--ls-h2);
 }
 h3 {
   font-size: var(--step1);
+  font-weight: 600;
+  line-height: var(--lh-h3);
+  letter-spacing: var(--ls-h3);
 }
 
 p {
@@ -105,7 +174,7 @@ p {
 }
 a {
   color: var(--brand-dark);
-  text-decoration-color: rgba(37, 99, 235, 0.35);
+  text-decoration-color: rgba(27, 30, 61, 0.35);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
@@ -123,7 +192,8 @@ a:hover {
 .eyebrow {
   font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  line-height: var(--lh-chip);
+  letter-spacing: var(--ls-eyebrow);
   text-transform: uppercase;
   color: var(--brand);
   margin: 0 0 0.6rem;
@@ -134,6 +204,10 @@ a:hover {
 }
 .mono {
   font-family: var(--mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: var(--lh-mono);
+  letter-spacing: var(--ls-mono);
 }
 .center {
   text-align: center;
@@ -154,7 +228,7 @@ a:hover {
 
 .wrap {
   width: 100%;
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 1.25rem;
 }
@@ -166,6 +240,24 @@ main {
   padding: 2.5rem 0 4rem;
   position: relative;
   z-index: 1;
+}
+
+/* Page ambience. Replaces the illustrations the auth pages used to carry: a
+   navy wash top-left, a violet one bottom-right, both far too faint to compete
+   with anything. Fixed rather than absolute so scrolling does not drag them. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42rem 32rem at 8% -6%, rgba(45, 49, 96, 0.07), transparent 62%),
+    radial-gradient(38rem 30rem at 96% 104%, rgba(109, 40, 217, 0.06), transparent 62%);
+}
+/* The home page paints its own hero atmosphere; two sets would muddy it. */
+body:has(.hero)::before {
+  display: none;
 }
 
 .masthead {
@@ -182,7 +274,7 @@ main {
   gap: 1rem;
   min-height: 68px;
   padding: 0.75rem 1.25rem;
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
 }
 .masthead__mark {
@@ -261,7 +353,7 @@ main {
 /* --- Hero ---------------------------------------------------------------- */
 
 .hero {
-  background: linear-gradient(168deg, #eef4ff 0%, #f7faff 55%, var(--page) 100%);
+  background: linear-gradient(168deg, var(--wash) 0%, var(--surface-2) 55%, var(--page) 100%);
   position: relative;
   overflow: hidden;
   padding: 3.25rem 0 5.5rem;
@@ -292,7 +384,7 @@ main {
 .hero__inner {
   position: relative;
   z-index: 1;
-  max-width: 1120px;
+  max-width: var(--shell);
   margin: 0 auto;
   padding: 0 1.25rem;
 }
@@ -303,7 +395,9 @@ main {
   align-items: center;
 }
 .hero h1 {
-  font-size: clamp(2.1rem, 5.2vw, 3.25rem);
+  font-size: clamp(2.1rem, 5.2vw, var(--step4));
+  line-height: var(--lh-display);
+  letter-spacing: var(--ls-display);
   max-width: 18ch;
   margin-bottom: 0.6rem;
 }
@@ -319,12 +413,19 @@ main {
 .hero__art {
   margin: 0;
 }
+/* No radius and no box-shadow. The hero art is a cut-out on transparency, and
+   both of those are drawn on the rectangular box rather than the subject — a
+   rounded shadow round an invisible rectangle is what made the image look like
+   it was sitting on a white card. Depth comes from the drop-shadow filter in
+   the pass below, which follows the alpha instead.
+
+   Artwork with its own full-bleed background (church.svg, say) is the opposite
+   case and does need a radius and shadow — add them on a modifier class, not
+   here, or the cut-out breaks again. */
 .hero__art img {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lift);
 }
 
 /* Date, time and venue as small white cards with an icon each. The order is
@@ -425,7 +526,7 @@ main {
   background: var(--brand-dark);
   border-color: var(--brand-dark);
   color: var(--on-brand);
-  box-shadow: 0 8px 18px -10px rgba(29, 78, 216, 0.8);
+  box-shadow: 0 8px 18px -10px rgba(18, 20, 44, 0.8);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px);
@@ -531,6 +632,33 @@ main {
   height: auto;
   display: block;
 }
+/* A portrait photograph in a landscape slot. The subject in these shots is
+   centred, so a plain cover crop lands on it without any smart cropping. */
+.card__art--crop {
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+.card__art--crop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.verify-art {
+  margin: 0;
+  aspect-ratio: 21 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.verify-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 38%;
+  display: block;
+}
 
 .grid {
   display: grid;
@@ -615,9 +743,22 @@ main {
   display: block;
   font-weight: 600;
   font-size: var(--step-1);
+  line-height: var(--lh-label);
   color: var(--ink);
   margin-bottom: 0.4rem;
 }
+/* Marks a field as optional in the label itself. Quieter than the label and
+   never on its own line, so a form of mostly-required fields reads as required
+   by default and the exceptions announce themselves. */
+.field__optional {
+  margin-left: 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .field__hint {
   font-size: var(--step-1);
   color: var(--muted);
@@ -650,7 +791,7 @@ textarea::placeholder {
 input:hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
-  border-color: #a9bde0;
+  border-color: var(--line-strong);
 }
 input:focus-visible,
 select:focus-visible,
@@ -734,23 +875,24 @@ fieldset legend {
   color: #fff;
 }
 .notice--success {
-  border-color: #bbf7d0;
+  border-color: var(--ok-line);
   border-left-color: var(--ok);
   background: var(--ok-wash);
-  color: #166534;
+  color: var(--ok-ink);
 }
 .notice--warn {
-  border-color: #fde68a;
+  border-color: var(--warn-line);
   border-left-color: var(--warn);
   background: var(--warn-wash);
-  color: #92400e;
+  color: var(--warn-ink);
 }
 
 .pill {
   display: inline-block;
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  line-height: var(--lh-chip);
+  letter-spacing: var(--ls-chip);
   text-transform: uppercase;
   padding: 0.3rem 0.6rem;
   border-radius: 999px;
@@ -758,14 +900,14 @@ fieldset legend {
   white-space: nowrap;
 }
 .pill--ok {
-  color: #166534;
+  color: var(--ok-ink);
   background: var(--ok-wash);
-  border-color: #bbf7d0;
+  border-color: var(--ok-line);
 }
 .pill--wait {
-  color: #92400e;
+  color: var(--warn-ink);
   background: var(--warn-wash);
-  border-color: #fde68a;
+  border-color: var(--warn-line);
 }
 /* Red labels are solid red with white text, everywhere, on both panels.
    A pale wash with dark red text is legible but reads as "note"; these labels
@@ -778,7 +920,7 @@ fieldset legend {
 }
 .pill--neutral {
   color: var(--muted);
-  background: #f1f5f9;
+  background: var(--wash);
   border-color: var(--line);
 }
 
@@ -795,12 +937,11 @@ fieldset legend {
 
 /* The stage: a lit band at the head of the room. */
 .stage {
-  max-width: 420px;
-  margin: 0 auto 2.25rem;
-  height: 46px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--wash-strong), var(--wash));
-  border: 1px solid #bfdbfe;
+  position: relative;
+  max-width: 460px;
+  margin: 0 auto 2.5rem;
+  height: 52px;
+  background: var(--gradient-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -808,7 +949,25 @@ fieldset legend {
   font-weight: 700;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--brand-dark);
+  color: #fff;
+  clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%);
+  filter: drop-shadow(0 10px 16px rgba(18, 20, 44, 0.3));
+}
+.stage::before {
+  content: '';
+  position: absolute;
+  left: 7.5%;
+  right: 7.5%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-on-dark) 22%,
+    var(--accent-light) 50%,
+    var(--accent-on-dark) 78%,
+    transparent
+  );
 }
 
 .section-block + .section-block {
@@ -844,57 +1003,62 @@ fieldset legend {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #c7d7f2;
+  border: 1px solid var(--ok-line);
   border-radius: 9px;
-  background: var(--surface);
-  color: var(--brand-dark);
+  background: var(--ok-wash);
+  color: var(--ok-ink);
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease,
     box-shadow 0.12s ease;
 }
 .seat:hover:not(:disabled) {
-  border-color: var(--brand);
-  background: var(--wash);
+  border-color: var(--ok);
+  background: #d6f2e6;
   transform: translateY(-2px);
-  box-shadow: 0 6px 14px -8px rgba(29, 78, 216, 0.7);
+  box-shadow: 0 6px 14px -8px rgba(11, 92, 64, 0.6);
 }
+/* The one you have just picked: the accent, filled, and lifted off the grid. */
 .seat[aria-pressed='true'] {
-  background: var(--brand);
-  border-color: var(--brand);
-  color: var(--on-brand);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   transform: translateY(-2px);
-  box-shadow: 0 8px 16px -8px rgba(29, 78, 216, 0.9);
+  box-shadow: 0 8px 16px -8px var(--accent-glow);
 }
 .seat[data-status='BOOKED'],
 .seat[data-status='RESERVED'],
 .seat[data-status='DISABLED'] {
   cursor: not-allowed;
 }
+/* Gone. Red, and struck through, so it is not the colour alone that says so. */
 .seat[data-status='BOOKED'] {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
-  color: #64748b;
+  background: var(--danger-wash);
+  border-color: var(--danger-line);
+  color: var(--danger-ink);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 .seat[data-status='RESERVED'] {
   background: var(--warn-wash);
-  border-color: #fcd34d;
-  color: #92400e;
+  border-color: var(--warn-line);
+  color: var(--warn-ink);
 }
 .seat[data-status='DISABLED'] {
-  background: #f1f5f9;
+  background: var(--wash);
   border-style: dashed;
   border-color: var(--line-strong);
   color: #94a3b8;
 }
 .seat[data-mine='true'] {
-  background: var(--ok-wash);
-  border: 2px solid var(--ok);
-  color: #166534;
+  background: var(--accent-wash);
+  border: 2px solid var(--accent);
+  color: var(--accent-strong);
   cursor: default;
   padding-top: 0.45rem;
+  text-decoration: none;
 }
 /* A tick above the number, so "already yours" survives being printed in
-   greyscale or seen by someone who cannot separate green from blue. */
+   greyscale, and is never confused with the plain green of a free seat. */
 .seat[data-mine='true']::before {
   content: '✓';
   position: absolute;
@@ -903,7 +1067,7 @@ fieldset legend {
   transform: translateX(-50%);
   font-size: 0.7rem;
   line-height: 1;
-  color: var(--ok);
+  color: var(--accent);
 }
 .seat:disabled:hover {
   transform: none;
@@ -932,31 +1096,31 @@ fieldset legend {
 .legend__swatch {
   width: 1.15rem;
   height: 1rem;
-  border: 1px solid #c7d7f2;
+  border: 1px solid var(--ok-line);
   border-radius: 5px;
-  background: var(--surface);
+  background: var(--ok-wash);
   flex: none;
 }
 .legend__swatch--selected {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .legend__swatch--booked {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  background: var(--danger-wash);
+  border-color: var(--danger-line);
 }
 .legend__swatch--reserved {
   background: var(--warn-wash);
-  border-color: #fcd34d;
+  border-color: var(--warn-line);
 }
 .legend__swatch--disabled {
-  background: #f1f5f9;
+  background: var(--wash);
   border-style: dashed;
   border-color: var(--line-strong);
 }
 .legend__swatch--mine {
-  background: var(--ok-wash);
-  border: 2px solid var(--ok);
+  background: var(--accent-wash);
+  border: 2px solid var(--accent);
 }
 
 /* Sticky confirmation bar on the seat screen. */
@@ -999,7 +1163,7 @@ fieldset legend {
   letter-spacing: 0.06em;
   color: var(--brand-dark);
   background: var(--wash);
-  border: 1px dashed #bfdbfe;
+  border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
   padding: 0.9rem 1.1rem;
   margin: 1.1rem 0;
@@ -1037,7 +1201,7 @@ td {
   color: var(--body-ink);
 }
 tbody tr:hover {
-  background: #f8fbff;
+  background: var(--wash);
 }
 td.num,
 th.num {
@@ -1249,7 +1413,7 @@ th.num {
 
 .skeleton {
   height: 1rem;
-  background: linear-gradient(90deg, #eef2f9 25%, #f8fafc 50%, #eef2f9 75%);
+  background: linear-gradient(90deg, var(--wash) 25%, var(--surface-2) 50%, var(--wash) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
   border-radius: 6px;
@@ -1267,29 +1431,6 @@ th.num {
 
 /* Auth screens carry a church at the foot of the page and a sprig in the
    corner: both decorative, both clear of the form. */
-.page-deco {
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-  user-select: none;
-  opacity: 0.9;
-}
-.page-deco--church {
-  right: 2vw;
-  bottom: 0;
-  width: min(24rem, 30vw);
-}
-.page-deco--sprig {
-  left: 1.5vw;
-  bottom: 6vh;
-  width: min(9rem, 12vw);
-}
-@media (max-width: 64rem) {
-  .page-deco {
-    display: none;
-  }
-}
-
 .poster {
   display: block;
   width: 100%;
@@ -1478,7 +1619,7 @@ th.num {
   font-size: var(--step-1);
   font-weight: 600;
   padding: 0.3rem 0.6rem;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--line-strong);
   background: var(--wash);
   color: var(--brand-dark);
   border-radius: 6px;
@@ -1502,6 +1643,16 @@ th.num {
 }
 .booking-row:last-child {
   border-bottom: 0;
+}
+/* History. Same shape as a live booking, one step back in emphasis, so the
+   eye finds the current ones first without the past ones looking broken. */
+.booking-row--past .booking-row__ref {
+  color: var(--muted);
+}
+.booking-row--past .seat-tag {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--muted);
 }
 .booking-row__ref {
   font-family: var(--mono);
@@ -1612,7 +1763,6 @@ th.num {
   .admin-nav,
   .btn,
   .legend,
-  .page-deco,
   .hero__art,
   .poster {
     display: none !important;
@@ -1642,7 +1792,7 @@ th.num {
 /* ===========================================================================
    PREMIUM LAYER
    Everything below re-tunes the plain blue-on-white base into the finished
-   look: a deeper indigo brand with a gold counter-accent, glass surfaces,
+   look: a deep navy brand with a violet counter-accent, glass surfaces,
    iconography inside every field, and motion that arrives once and then gets
    out of the way. It is appended rather than merged so the structural rules
    above stay readable on their own.
@@ -1658,7 +1808,7 @@ th.num {
      white card reads as lifted off the page without needing a heavy shadow. */
   --surface: #ffffff;
   --surface-2: #fbfcfd;
-  --page: #f4f6f9;
+  --page: #f5f6fa;
   --wash: #eef1f6;
   --wash-strong: #dfe4ec;
   --line: #e6eaf0;
@@ -1668,24 +1818,25 @@ th.num {
   --body-ink: #3d4757;
   --muted: #64748b;
 
-  /* Deep navy carries structure — sidebar, stage, primary actions. It is the
-     background colour of the application, not a highlight. */
-  --brand: #16233d;
-  --brand-dark: #0d1729;
-  --brand-light: #2c4066;
-  --brand-glow: rgba(13, 23, 41, 0.3);
+  /* Deep navy carries structure — sidebar, stage, chrome. It is the background
+     colour of the application, not a highlight; the accent does the pointing. */
+  --brand: #1b1e3d;
+  --brand-dark: #12142c;
+  --brand-light: #2d3160;
+  --brand-glow: rgba(18, 20, 44, 0.3);
   --on-brand: #ffffff;
 
-  /* Warm gold is rationed: primary buttons, selected states, the metric that
+  /* Violet is rationed: primary buttons, selected states, the metric that
      matters on a card, and nothing else. It never carries meaning on its own —
-     every gold state has a label or an icon beside it. */
-  --accent: #b58328;
-  --accent-strong: #96690f;
-  --accent-light: #e0ac4c;
-  --accent-wash: #fdf7ea;
-  --accent-line: #ecd9ac;
-  --accent-glow: rgba(181, 131, 40, 0.3);
-  --on-accent: #1c1508;
+     every violet state has a label or an icon beside it. */
+  --accent: #6d28d9;
+  --accent-strong: #5b21b6;
+  --accent-light: #8b5cf6;
+  --accent-wash: #f5f3ff;
+  --accent-line: #ddd6fe;
+  --accent-on-dark: #a78bfa;  /* 5.9:1 on --brand; --accent-light is only 3.8 */
+  --accent-glow: rgba(109, 40, 217, 0.32);
+  --on-accent: #ffffff;
 
   --ok: #12805a;
   --ok-wash: #e3f6ee;
@@ -1696,11 +1847,11 @@ th.num {
   --danger: #b3253a;
   --danger-wash: #fdeaed;
   --danger-line: #f2c2ca;
-  --info: #2c4066;
-  --info-wash: #eaeef6;
+  --info: #4f46e5;
+  --info-wash: #eef2ff;
 
-  --gradient-brand: linear-gradient(150deg, #23334f 0%, #16233d 50%, #0d1729 100%);
-  --gradient-gold: linear-gradient(135deg, #e0ac4c 0%, #b58328 100%);
+  --gradient-brand: linear-gradient(150deg, #2a2f5c 0%, #1b1e3d 52%, #12142c 100%);
+  --gradient-accent: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
   --gradient-sheen: linear-gradient(
     115deg,
     rgba(255, 255, 255, 0) 30%,
@@ -1727,13 +1878,13 @@ th.num {
   --radius-pill: 999px;
 
   /* Minimal by intent: one soft ambient shadow, a slightly deeper lift, and a
-     gold ring for the few things that are genuinely primary. */
+     violet ring for the few things that are genuinely primary. */
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 8px 24px -16px rgba(15, 23, 42, 0.28);
   --shadow-lift: 0 2px 6px rgba(15, 23, 42, 0.06), 0 20px 44px -24px rgba(15, 23, 42, 0.34);
   --shadow-glow: 0 8px 22px -10px var(--accent-glow);
-  --focus: 0 0 0 3px rgba(181, 131, 40, 0.35);
-  --focus-navy: 0 0 0 3px rgba(44, 64, 102, 0.35);
+  --focus: 0 0 0 3px rgba(109, 40, 217, 0.32);
+  --focus-navy: 0 0 0 3px rgba(45, 49, 96, 0.35);
 
   --sidebar-width: 264px;
   --sidebar-width-collapsed: 76px;
@@ -1807,13 +1958,13 @@ th.num {
 }
 @keyframes cc-pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 var(--brand-glow);
+    box-shadow: 0 0 0 0 var(--accent-glow);
   }
   70% {
-    box-shadow: 0 0 0 12px rgba(67, 56, 202, 0);
+    box-shadow: 0 0 0 12px rgba(109, 40, 217, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(67, 56, 202, 0);
+    box-shadow: 0 0 0 0 rgba(109, 40, 217, 0);
   }
 }
 @keyframes cc-spin {
@@ -1821,7 +1972,7 @@ th.num {
     transform: rotate(360deg);
   }
 }
-@keyframes cc-gold-sweep {
+@keyframes cc-accent-sweep {
   from {
     background-position: 0% 50%;
   }
@@ -1876,8 +2027,8 @@ main > .wrap > *:nth-child(n + 6) {
 
 body {
   background:
-    radial-gradient(60rem 40rem at 12% -8%, rgba(99, 102, 241, 0.13), transparent 62%),
-    radial-gradient(48rem 34rem at 96% 4%, rgba(234, 181, 74, 0.12), transparent 60%),
+    radial-gradient(60rem 40rem at 12% -8%, rgba(45, 49, 96, 0.13), transparent 62%),
+    radial-gradient(48rem 34rem at 96% 4%, rgba(139, 92, 246, 0.13), transparent 60%),
     var(--page);
   background-attachment: fixed;
 }
@@ -1893,7 +2044,7 @@ body {
   width: 1.35rem;
   height: 2px;
   border-radius: 2px;
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
   flex: none;
 }
 .eyebrow.center::before,
@@ -1938,7 +2089,7 @@ body {
   bottom: 0.25rem;
   height: 2px;
   border-radius: 2px;
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
   transition: left var(--t) var(--ease-out), right var(--t) var(--ease-out);
 }
 .masthead nav a:not(:last-child):hover::after,
@@ -1972,9 +2123,9 @@ body {
   inset: -30% -20%;
   z-index: -2;
   background:
-    radial-gradient(28rem 22rem at 22% 28%, rgba(99, 102, 241, 0.34), transparent 62%),
-    radial-gradient(26rem 20rem at 78% 22%, rgba(234, 181, 74, 0.28), transparent 62%),
-    radial-gradient(30rem 24rem at 58% 88%, rgba(49, 46, 129, 0.24), transparent 64%);
+    radial-gradient(28rem 22rem at 22% 28%, rgba(45, 49, 96, 0.34), transparent 62%),
+    radial-gradient(26rem 20rem at 78% 22%, rgba(139, 92, 246, 0.3), transparent 62%),
+    radial-gradient(30rem 24rem at 58% 88%, rgba(27, 30, 61, 0.24), transparent 64%);
   filter: blur(12px);
   animation: cc-drift 26s ease-in-out infinite;
   opacity: 1;
@@ -1984,7 +2135,7 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-image: radial-gradient(rgba(49, 46, 129, 0.14) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(27, 30, 61, 0.14) 1px, transparent 1px);
   background-size: 22px 22px;
   -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 70%);
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 70%);
@@ -1997,11 +2148,11 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: cc-gold-sweep 9s linear infinite;
+  animation: cc-accent-sweep 9s linear infinite;
 }
 .hero__art img {
   animation: cc-float 8s ease-in-out infinite;
-  filter: drop-shadow(0 30px 50px rgba(49, 46, 129, 0.22));
+  filter: drop-shadow(0 30px 50px rgba(27, 30, 61, 0.22));
 }
 .hero__meta li {
   background-color: rgba(255, 255, 255, 0.72);
@@ -2086,13 +2237,14 @@ body {
   transform: translateY(0) scale(0.985);
 }
 .btn--primary {
-  background: var(--gradient-brand);
+  background: var(--gradient-accent);
   border-color: transparent;
+  color: var(--on-accent);
   box-shadow: var(--shadow-glow);
 }
 .btn--primary:hover:not(:disabled) {
-  background: var(--gradient-brand);
-  box-shadow: 0 18px 34px -14px var(--brand-glow);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  box-shadow: 0 18px 34px -14px var(--accent-glow);
 }
 .btn--ghost {
   background: rgba(255, 255, 255, 0.86);
@@ -2151,8 +2303,8 @@ body {
   padding: 1px;
   background: linear-gradient(
     150deg,
-    rgba(99, 102, 241, 0.5),
-    rgba(234, 181, 74, 0.35) 55%,
+    rgba(45, 49, 96, 0.5),
+    rgba(139, 92, 246, 0.38) 55%,
     transparent 85%
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -2437,7 +2589,7 @@ fieldset legend::before {
   width: 0.42rem;
   height: 0.42rem;
   border-radius: 50%;
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
 }
 
 /* --- Status surfaces ------------------------------------------------------ */
@@ -2461,19 +2613,21 @@ fieldset legend::before {
   position: relative;
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(38rem 20rem at 50% -10%, rgba(99, 102, 241, 0.1), transparent 65%),
+    radial-gradient(38rem 20rem at 50% -10%, rgba(45, 49, 96, 0.1), transparent 65%),
     rgba(255, 255, 255, 0.95);
   overflow: hidden;
 }
+/* The base rule clips this to a trapezoid, so no radius and no box-shadow: a
+   radius would fight the clip at the corners, and a box-shadow is painted
+   outside the border box and would simply be clipped away. The depth comes
+   from the drop-shadow filter on the base rule, which follows the shape. */
 .stage {
   position: relative;
   overflow: hidden;
   background: var(--gradient-brand);
   color: var(--on-brand);
   border: none;
-  border-radius: var(--radius-pill);
   letter-spacing: 0.32em;
-  box-shadow: 0 16px 34px -18px var(--brand-glow);
 }
 .stage::after {
   content: '';
@@ -2520,18 +2674,21 @@ fieldset legend::before {
   box-shadow: 0 12px 22px -10px var(--brand-glow);
   z-index: 2;
 }
+/* The seat you are picking right now is the accent, filled. Everything else in
+   the grid is a pale wash, so the filled one is unmistakable even before the
+   colour registers. */
 .seat[aria-pressed='true'] {
-  background: var(--gradient-brand);
+  background: var(--gradient-accent);
   border-color: transparent;
-  color: var(--on-brand);
+  color: var(--on-accent);
   transform: translateY(-2px) scale(1.06);
   animation: cc-pulse-ring 2s var(--ease-out) infinite;
 }
-/* A seat you already hold stays green with its tick, deliberately: it is the one
-   state that has to survive greyscale printing and colour-blindness, so it is
-   left out of the indigo/gold scheme rather than folded into it. */
+/* A seat you already hold keeps its outline and its tick rather than being
+   filled: it is the one state that has to survive greyscale printing and
+   colour-blindness, so it is shaped differently, not just coloured differently. */
 .legend__swatch--selected {
-  background: var(--gradient-brand);
+  background: var(--gradient-accent);
   border-color: transparent;
 }
 
@@ -2669,13 +2826,6 @@ tbody tr {
 
 /* --- Decorative art ------------------------------------------------------- */
 
-.page-deco {
-  animation: cc-float 11s ease-in-out infinite;
-}
-.page-deco--sprig {
-  animation-duration: 14s;
-  animation-direction: reverse;
-}
 .poster {
   border-radius: var(--radius);
   box-shadow: var(--shadow-lift);
@@ -2754,12 +2904,210 @@ tbody tr {
   -webkit-mask: url('/assets/icons/check.svg') center / contain no-repeat;
   mask: url('/assets/icons/check.svg') center / contain no-repeat;
 }
-.code-input {
+/* --- Sign-in welcome panel -----------------------------------------------
+   Artwork beside the heading rather than above the form. The sign-in column is
+   580px, so a 500-square illustration at full width would be the whole screen
+   and the form would start below the fold — it sits at 8.5rem instead, which
+   is enough for the steeple and the moon to still read.
+   ------------------------------------------------------------------------- */
+
+.auth-hero {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: center;
+  padding: var(--space-5);
+  background: linear-gradient(150deg, var(--accent-wash) 0%, var(--surface) 72%);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-lg);
+}
+.auth-hero__art {
+  margin: 0;
+}
+/* Full-bleed artwork, so unlike the hero cut-out this one does want a box. */
+.auth-hero__art img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+/* Stacked on a narrow screen. The art shrinks rather than going full width —
+   at 580px and below it is decoration, and the form is the job. */
+@media (max-width: 34rem) {
+  .auth-hero {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+    gap: var(--space-4);
+  }
+  .auth-hero__art {
+    width: 7.5rem;
+  }
+}
+
+/* --- The verification code ------------------------------------------------
+   A row of boxes drawn under one real <input>. The input keeps the id, the
+   name and autocomplete="one-time-code" so paste and OS autofill still work;
+   it is simply made invisible and stretched over the boxes, which are painted
+   from its value. Nothing here is load-bearing — with the stylesheet or the
+   script missing, what is left is an ordinary text field.
+   ------------------------------------------------------------------------- */
+
+.otp {
+  position: relative;
+  margin: 0.35rem 0 0.15rem;
+}
+.otp__boxes {
+  display: flex;
+  gap: clamp(0.3rem, 2.2vw, 0.6rem);
+  justify-content: center;
+}
+.otp__box {
+  flex: 0 1 3.25rem;
+  aspect-ratio: 3 / 4;
+  max-height: 4.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--mono);
-  font-size: 1.5rem;
-  letter-spacing: 0.35em;
-  text-align: center;
+  font-size: clamp(1.1rem, 5.5vw, 1.5rem);
   font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--t-fast) ease, box-shadow var(--t) var(--ease-out),
+    background-color var(--t-fast) ease, transform var(--t) var(--ease-spring);
+}
+.otp__box.is-filled {
+  border-color: var(--brand-light);
+  background: var(--surface);
+}
+/* The next box to receive a digit. The caret is drawn rather than native,
+   because the real caret sits in a transparent input the width of the row. */
+.otp__box.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+.otp__box.is-active::after {
+  content: '';
+  width: 2px;
+  height: 45%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: cc-caret 1.05s steps(1, end) infinite;
+}
+/* One digit landing. */
+.otp__box.is-landing {
+  animation: cc-otp-land 0.34s var(--ease-spring);
+}
+
+/* Descendant-qualified on purpose. The base field rule is written as
+   input[type='text'] — specificity 0-1-1 — so a bare .otp__input (0-1-0) loses
+   to it and the control would paint its own opaque white box straight over the
+   digits. .otp .otp__input is 0-2-0 and wins. */
+.otp .otp__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
+  caret-color: transparent;
+  text-align: center;
+  font-size: 1rem;
+  /* Safari paints a shadow for the value even when the colour is transparent. */
+  text-shadow: none;
+  cursor: text;
+}
+/* Same reason: input:focus-visible is 0-2-1 and would put its border and ring
+   back on an element that is meant to be invisible. */
+.otp .otp__input:focus,
+.otp .otp__input:focus-visible,
+.otp .otp__input:hover {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.otp__input::selection {
+  background: transparent;
+}
+
+/* Every digit in: the row settles as one unit and picks up the accent ring. */
+.otp.is-complete .otp__box {
+  border-color: var(--accent);
+}
+.otp.is-complete .otp__box.is-filled {
+  animation: cc-otp-settle 0.5s var(--ease-out) both;
+}
+.otp.is-complete .otp__box:nth-child(2) { animation-delay: 0.04s; }
+.otp.is-complete .otp__box:nth-child(3) { animation-delay: 0.08s; }
+.otp.is-complete .otp__box:nth-child(4) { animation-delay: 0.12s; }
+.otp.is-complete .otp__box:nth-child(5) { animation-delay: 0.16s; }
+.otp.is-complete .otp__box:nth-child(6) { animation-delay: 0.20s; }
+.otp.is-complete .otp__box:nth-child(7) { animation-delay: 0.24s; }
+.otp.is-complete .otp__box:nth-child(8) { animation-delay: 0.28s; }
+
+/* In flight to the server. */
+.otp.is-checking .otp__box {
+  animation: cc-otp-wait 1.1s var(--ease-out) infinite;
+}
+.otp.is-checking .otp__box:nth-child(2) { animation-delay: 0.08s; }
+.otp.is-checking .otp__box:nth-child(3) { animation-delay: 0.16s; }
+.otp.is-checking .otp__box:nth-child(4) { animation-delay: 0.24s; }
+.otp.is-checking .otp__box:nth-child(5) { animation-delay: 0.32s; }
+.otp.is-checking .otp__box:nth-child(6) { animation-delay: 0.40s; }
+.otp.is-checking .otp__box:nth-child(7) { animation-delay: 0.48s; }
+.otp.is-checking .otp__box:nth-child(8) { animation-delay: 0.56s; }
+
+.otp.is-verified .otp__box {
+  border-color: var(--ok);
+  background: var(--ok-wash);
+  color: var(--ok);
+  animation: cc-otp-land 0.4s var(--ease-spring);
+}
+
+.otp.is-error .otp__boxes {
+  animation: cc-shake 0.42s var(--ease-out);
+}
+.otp.is-error .otp__box {
+  border-color: var(--danger);
+  background: var(--danger-wash);
+}
+
+@keyframes cc-caret {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes cc-otp-land {
+  0% { transform: scale(0.86); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes cc-otp-settle {
+  0% { box-shadow: var(--shadow-sm); }
+  55% { box-shadow: 0 0 0 3px var(--accent-wash), 0 8px 18px -10px var(--accent-glow); }
+  100% { box-shadow: var(--shadow-sm); }
+}
+@keyframes cc-otp-wait {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-4px); opacity: 0.72; }
+}
+@keyframes cc-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-7px); }
+  38% { transform: translateX(6px); }
+  58% { transform: translateX(-4px); }
+  78% { transform: translateX(2px); }
 }
 
 /* --- Motion off ----------------------------------------------------------- */
@@ -2834,21 +3182,21 @@ input[type='search'] {
 
    Two rules hold everywhere in here:
      * Spacing comes from the --space-* scale. No arbitrary pixel margins.
-     * Gold is for primary actions, selected states and the one metric that
+     * Violet is for primary actions, selected states and the one metric that
        matters on a card. Navy does structure. Nothing else competes.
    =========================================================================== */
 
-/* --- Buttons: gold leads, navy supports ---------------------------------- */
+/* --- Buttons: violet leads, navy supports -------------------------------- */
 
 .btn--primary {
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
   color: var(--on-accent);
   border-color: transparent;
   box-shadow: var(--shadow-glow);
   font-weight: 650;
 }
 .btn--primary:hover:not(:disabled) {
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
   box-shadow: 0 12px 26px -10px var(--accent-glow);
 }
 .btn--navy {
@@ -2924,8 +3272,12 @@ input[type='search'] {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-3);
-  background: var(--gradient-brand);
-  color: rgba(255, 255, 255, 0.72);
+  /* Light rail. The console is a tool people sit in front of all day, and a
+     dark column beside white content is the highest-contrast edge on the
+     screen — it pulls the eye away from the tables it is meant to frame. */
+  background: var(--surface);
+  color: var(--muted);
+  border-right: 1px solid var(--line);
   overflow: hidden;
   z-index: 40;
 }
@@ -2935,14 +3287,14 @@ input[type='search'] {
   gap: var(--space-3);
   padding: var(--space-2);
   margin-bottom: var(--space-4);
-  color: #fff;
+  color: var(--ink);
   text-decoration: none;
   border-radius: var(--radius);
   transition: background-color var(--t-fast) ease;
 }
 .sidebar__brand:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: var(--wash);
+  color: var(--ink);
 }
 .sidebar__logo {
   width: 34px;
@@ -2967,7 +3319,7 @@ input[type='search'] {
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent-light);
+  color: var(--accent);
   white-space: nowrap;
 }
 .sidebar__nav {
@@ -2985,7 +3337,7 @@ input[type='search'] {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--muted);
   padding: var(--space-4) var(--space-3) var(--space-2);
   white-space: nowrap;
 }
@@ -3010,25 +3362,19 @@ input[type='search'] {
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 .sidebar__link:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  background: var(--wash);
+  color: var(--ink);
 }
+/* The active item is a filled violet pill. It is also bolder and carries
+   aria-current, so the state never rests on colour alone. */
 .sidebar__link[aria-current='page'] {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--gradient-accent);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 8px 18px -10px var(--accent-glow);
 }
-/* The active marker is a gold bar, but the item is also filled and bolded, so
-   the state never rests on colour alone. */
-.sidebar__link[aria-current='page']::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--space-3) * -1 + 2px);
-  top: 20%;
-  bottom: 20%;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--gradient-gold);
+.sidebar__link[aria-current='page']:hover {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
 }
 .sidebar__icon {
   width: 1.15rem;
@@ -3062,7 +3408,7 @@ input[type='search'] {
   display: none;
 }
 .sidebar__foot {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--line);
   padding-top: var(--space-3);
   margin-top: var(--space-3);
 }
@@ -3082,7 +3428,7 @@ input[type='search'] {
   transition: background-color var(--t-fast) ease;
 }
 .sidebar__user:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--wash);
 }
 .sidebar__who {
   min-width: 0;
@@ -3091,7 +3437,7 @@ input[type='search'] {
   line-height: 1.3;
 }
 .sidebar__who strong {
-  color: #fff;
+  color: var(--ink);
   font-size: 0.8125rem;
   font-weight: 600;
   overflow: hidden;
@@ -3100,7 +3446,7 @@ input[type='search'] {
 }
 .sidebar__who span {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3115,7 +3461,7 @@ input[type='search'] {
   border: none;
   background: transparent;
   border-radius: var(--radius-sm);
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
   font: inherit;
   font-size: 0.8125rem;
   cursor: pointer;
@@ -3123,8 +3469,8 @@ input[type='search'] {
   transition: background-color var(--t-fast) ease, color var(--t-fast) ease;
 }
 .sidebar__collapse:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  background: var(--wash);
+  color: var(--ink);
 }
 .sidebar__collapse .sidebar__icon {
   transition: transform var(--t) var(--ease-out);
@@ -3269,8 +3615,8 @@ input[type='search'] {
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-.avatar--gold {
-  background: var(--gradient-gold);
+.avatar--accent {
+  background: var(--gradient-accent);
   color: var(--on-accent);
 }
 .topbar__menu {
@@ -3282,7 +3628,8 @@ input[type='search'] {
 .console__body {
   flex: 1 1 auto;
   padding: var(--space-6);
-  max-width: 1560px;
+  /* The console already sits beside a 264px rail, so it takes the whole of
+     what is left rather than 90% of it — capping twice reads as a stray gutter. */
   width: 100%;
 }
 .page-head {
@@ -3402,12 +3749,63 @@ input[type='search'] {
   transform: translateY(-2px);
   box-shadow: var(--shadow);
 }
+
+/* A tile that leads somewhere. The whole card is the target, but the thing the
+   keyboard focuses is a real button stretched across it — so the pointer gets
+   the big area and the tab order gets one labelled stop, not five. */
+.kpi--link {
+  cursor: pointer;
+}
+.kpi--link:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent-line) inset;
+}
+.kpi__hit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: inherit;
+  /* No text of its own: the aria-label carries the whole sentence. */
+  font: inherit;
+  color: transparent;
+}
+.kpi__hit:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+/* The accent chevron only appears on a tile that actually goes somewhere, so
+   "clickable" is visible without relying on the hover state. */
+.kpi--link .kpi__label::after {
+  content: '›';
+  margin-left: 0.35rem;
+  font-size: 1.1em;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--t) var(--ease-out), transform var(--t) var(--ease-out);
+  display: inline-block;
+  transform: translateX(-2px);
+}
+.kpi--link:hover .kpi__label::after,
+.kpi--link:focus-within .kpi__label::after {
+  opacity: 1;
+  transform: none;
+}
+/* Chip left, text stacked beside it. The chip is the only colour on the tile,
+   which is what lets five of them sit in a row and still be told apart at a
+   glance without any of them shouting. */
 .kpi__top {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+.kpi__text {
+  min-width: 0;
+  flex: 1;
 }
 .kpi__label {
   font-size: 0.75rem;
@@ -3415,18 +3813,26 @@ input[type='search'] {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0;
+  margin: 0 0 var(--space-2);
 }
 .kpi__icon {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--wash);
   color: var(--brand-light);
 }
+/* One tint per tile, set by the caller. Washes are light enough that the mark
+   inside clears 4.5:1 on every one of them. */
+.kpi__icon--violet { background: #f3f0ff; color: #6d28d9; }
+.kpi__icon--pink   { background: #fdf2f8; color: #be1a63; }
+.kpi__icon--orange { background: #fff5e9; color: #9a5b06; }
+.kpi__icon--green  { background: #e9f8f1; color: #0b6b4c; }
+.kpi__icon--blue   { background: #eef2ff; color: #3b39c4; }
+.kpi__icon--red    { background: #fdeef0; color: #a81f33; }
 .kpi__icon::before {
   content: '';
   width: 1.15rem;
@@ -3435,20 +3841,16 @@ input[type='search'] {
   -webkit-mask: var(--kpi-icon) center / contain no-repeat;
   mask: var(--kpi-icon) center / contain no-repeat;
 }
-/* One card per screen is the headline. It gets the gold. */
-.kpi--feature .kpi__icon {
-  background: var(--accent-wash);
-  color: var(--accent-strong);
-}
+/* One card per screen is the headline. It gets the accent on the figure. */
 .kpi--feature .kpi__value {
   color: var(--accent-strong);
 }
 .kpi__value {
   font-family: var(--display);
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.03em;
+  line-height: var(--lh-metric);
+  letter-spacing: var(--ls-metric);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   margin: 0;
@@ -3482,8 +3884,8 @@ input[type='search'] {
   content: '▲';
 }
 .kpi__delta--down {
-  background: var(--danger);
-  color: #fff;
+  background: var(--danger-wash);
+  color: var(--danger-ink);
 }
 .kpi__delta--down::before {
   content: '▼';
@@ -3511,7 +3913,7 @@ input[type='search'] {
   transition: width 0.8s var(--ease-out);
 }
 .kpi--feature .kpi__rail i {
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
 }
 
 /* --- Status chips --------------------------------------------------------- */
@@ -3524,8 +3926,9 @@ input[type='search'] {
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  line-height: var(--lh-chip);
+  letter-spacing: var(--ls-chip);
   white-space: nowrap;
 }
 /* Every chip carries a shape as well as a colour. */
@@ -3564,7 +3967,7 @@ input[type='search'] {
   border-color: var(--line);
   color: var(--muted);
 }
-.chip--gold {
+.chip--accent {
   background: var(--accent-wash);
   border-color: var(--accent-line);
   color: var(--accent-strong);
@@ -3942,13 +4345,27 @@ input[type='search'] {
   flex-wrap: wrap;
 }
 
+/* Centred by layout, not by transform.
+
+   This used to be top/left 50% with translate(-50%, -50%). cc-pop animates
+   `transform`, so the animation replaced the centring translate outright, and
+   animation-fill-mode: both meant it never came back — the dialog settled half
+   its own size down and to the right of centre. Measured at 224px right and
+   77px down on a 1280 viewport, which is exactly half of 367x154.
+
+   inset + auto margins centre it without touching transform, so cc-pop is free
+   to scale and the two can never fight again. Auto margins also collapse to
+   zero when the box is taller than the viewport, so a long dialog pins to the
+   top and stays scrollable instead of having its head cut off. */
 .dialog {
   position: fixed;
   z-index: 80;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  margin: auto;
   width: min(28rem, calc(100vw - var(--space-6)));
+  height: max-content;
+  max-height: calc(100dvh - var(--space-6));
+  overflow-y: auto;
   padding: var(--space-5);
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -3968,6 +4385,36 @@ input[type='search'] {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+/* --- Delivery rail ---------------------------------------------------------
+   One row per notification in the drawer that opens after a resend: what was
+   sent, on which channel, to whom, and how it went.
+   ------------------------------------------------------------------------- */
+
+.delivery-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.delivery-row:last-child {
+  border-bottom: 0;
+}
+.delivery-row strong {
+  font-size: 0.875rem;
+  text-transform: capitalize;
+}
+.delivery-row__meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.delivery-row__right {
+  text-align: right;
+  flex: none;
 }
 
 /* --- Definition lists inside panels --------------------------------------- */
@@ -4264,7 +4711,7 @@ input[type='search'] {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(13, 23, 41, 0.45) 0%, transparent 42%, rgba(13, 23, 41, 0.5) 100%);
+  background: linear-gradient(180deg, rgba(18, 20, 44, 0.45) 0%, transparent 42%, rgba(18, 20, 44, 0.5) 100%);
   pointer-events: none;
 }
 .concert-tile__badge {
@@ -4285,7 +4732,7 @@ input[type='search'] {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  text-shadow: 0 1px 3px rgba(13, 23, 41, 0.7);
+  text-shadow: 0 1px 3px rgba(18, 20, 44, 0.7);
 }
 .concert-tile__body {
   padding: var(--space-4) var(--space-5) var(--space-5);
@@ -4355,7 +4802,7 @@ input[type='search'] {
   transition: width 0.8s var(--ease-out);
 }
 .occupancy--high .occupancy__rail i {
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
 }
 .occupancy--full .occupancy__rail i {
   background: linear-gradient(135deg, #d9556a, var(--danger));
@@ -4426,7 +4873,7 @@ input[type='search'] {
   position: relative;
   padding: var(--space-6) var(--space-5);
   background:
-    radial-gradient(48rem 22rem at 50% -6%, rgba(44, 64, 102, 0.08), transparent 62%),
+    radial-gradient(48rem 22rem at 50% -6%, rgba(45, 49, 96, 0.08), transparent 62%),
     var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -4439,18 +4886,37 @@ input[type='search'] {
   margin: 0 auto;
 }
 .auditorium__stage {
-  width: min(30rem, 80%);
+  position: relative;
+  width: min(34rem, 78%);
   margin: 0 auto var(--space-7);
-  padding: var(--space-3);
+  padding: 0.85rem var(--space-6) 0.9rem;
   text-align: center;
   background: var(--gradient-brand);
   color: #fff;
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.32em;
   text-transform: uppercase;
-  box-shadow: 0 14px 30px -18px rgba(13, 23, 41, 0.6);
+  clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%);
+  filter: drop-shadow(0 10px 16px rgba(18, 20, 44, 0.32));
+}
+/* The lit edge along the front of the platform. */
+.auditorium__stage::before {
+  content: '';
+  position: absolute;
+  left: 7.5%;
+  right: 7.5%;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-on-dark) 22%,
+    var(--accent-light) 50%,
+    var(--accent-on-dark) 78%,
+    transparent
+  );
+  opacity: 0.9;
 }
 .zone {
   margin-bottom: var(--space-6);
@@ -4473,6 +4939,21 @@ input[type='search'] {
   flex: 1 1 auto;
   height: 1px;
   background: var(--line);
+}
+/* The delete control sits after the count. Quiet but always present rather
+   than revealed on hover: it is the only way to remove a section, and a
+   destructive action nobody can find is its own kind of problem. */
+.zone__head .btn--icon {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  color: var(--muted);
+}
+.zone__head .btn--icon:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger-line);
+  background: var(--danger-wash);
 }
 .zone__count {
   font-size: 0.75rem;
@@ -4547,28 +5028,28 @@ input[type='search'] {
 }
 .pseat:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: var(--shadow);
-  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent), var(--shadow);
   z-index: 2;
 }
 .pseat[data-status='AVAILABLE'] {
-  background: var(--surface);
-  border-color: var(--line-strong);
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
 }
 .pseat[data-status='BOOKED'] {
-  background: var(--brand);
-  border-color: var(--brand);
+  background: var(--danger);
+  border-color: var(--danger);
   color: #fff;
 }
 .pseat[data-status='BOOKED']::after {
   content: '●';
-  background: var(--brand);
+  background: var(--danger);
   color: #fff;
 }
 .pseat[data-status='RESERVED'] {
-  background: var(--warn-wash);
+  background: var(--warn);
   border-color: var(--warn);
-  color: var(--warn);
+  color: #fff;
 }
 .pseat[data-status='RESERVED']::after {
   content: '◑';
@@ -4578,13 +5059,13 @@ input[type='search'] {
 .pseat[data-status='DISABLED'] {
   background: repeating-linear-gradient(
     45deg,
-    var(--wash),
-    var(--wash) 4px,
-    var(--wash-strong) 4px,
-    var(--wash-strong) 8px
+    #8d95a6,
+    #8d95a6 4px,
+    #7c8494 4px,
+    #7c8494 8px
   );
-  border-color: var(--line-strong);
-  color: var(--muted);
+  border-color: #6f7787;
+  color: #fff;
   cursor: not-allowed;
 }
 .pseat[data-status='DISABLED']::after {
@@ -4604,10 +5085,11 @@ input[type='search'] {
     var(--shadow-glow);
   z-index: 3;
 }
-.pseat[aria-pressed='true'][data-status='AVAILABLE'] {
-  background: var(--accent-wash);
-  border-color: var(--accent);
-}
+/* Deliberately no repaint for a selected AVAILABLE seat any more. It used to
+   go pale violet, which worked when available seats were white — now that they
+   are solid green it left white text on a near-white ground. The ring above
+   already says "selected", and leaving the fill alone keeps the status
+   readable, which is the whole point of ringing rather than repainting. */
 /* The legend's "Selected" swatch has no status of its own, so it needs a fill
    to look like anything at all. */
 .seat-legend .pseat[aria-pressed='true'] {
@@ -4759,7 +5241,7 @@ input[type='search'] {
 .notif:hover {
   background: var(--surface-2);
 }
-/* Unread is a gold rail plus a bolder title — never colour alone. */
+/* Unread is an accent rail plus a bolder title — never colour alone. */
 .notif[data-unread='true'] {
   background: var(--accent-wash);
   box-shadow: inset 3px 0 0 var(--accent);
@@ -5032,7 +5514,16 @@ input[type='search'] {
 /* --- Login ---------------------------------------------------------------- */
 
 .auth {
-  min-height: 100vh;
+  /* Pinned to the viewport, never taller. dvh so a mobile URL bar cannot push
+     it past the visible area; vh first as the fallback. */
+  height: 100vh;
+  height: 100dvh;
+  /* This is a <main>, and the base main rule adds 2.5rem/4rem. Against a
+     height-pinned full-bleed layout that 104px came straight off the grid row,
+     so the form column was 104px shorter than the screen and scrolled inside
+     itself for no reason. */
+  padding: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   background: var(--brand-dark);
@@ -5041,7 +5532,9 @@ input[type='search'] {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  /* Only the brand lives here now the pitch has gone, so it sits at the top
+     instead of being pushed apart from a second child that no longer exists. */
+  justify-content: flex-start;
   padding: var(--space-7);
   overflow: hidden;
   color: #fff;
@@ -5059,7 +5552,7 @@ input[type='search'] {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: linear-gradient(160deg, rgba(13, 23, 41, 0.72) 0%, rgba(13, 23, 41, 0.88) 100%);
+  background: linear-gradient(160deg, rgba(18, 20, 44, 0.72) 0%, rgba(18, 20, 44, 0.88) 100%);
 }
 .auth__art > * {
   position: relative;
@@ -5089,48 +5582,22 @@ input[type='search'] {
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent-light);
-}
-.auth__pitch h2 {
-  color: #fff;
-  font-size: 2rem;
-  line-height: 1.2;
-  letter-spacing: -0.03em;
-  max-width: 16ch;
-  margin: 0 0 var(--space-4);
-}
-.auth__pitch p {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.9375rem;
-  max-width: 42ch;
-  margin: 0;
-}
-.auth__stats {
-  display: flex;
-  gap: var(--space-6);
-  margin-top: var(--space-6);
-  padding: 0;
-  list-style: none;
-}
-.auth__stats strong {
-  display: block;
-  font-family: var(--display);
-  font-size: 1.5rem;
-  color: var(--accent-light);
-  line-height: 1;
-}
-.auth__stats span {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--accent-on-dark);
 }
 .auth__panel {
   display: grid;
-  place-items: center;
+  /* Scrolls inside itself rather than scrolling the page. */
+  overflow-y: auto;
   padding: var(--space-6);
   background: var(--page);
 }
+/* margin:auto rather than place-items:center. Both centre the card, but auto
+   margins collapse to zero once the card is taller than the column, so a short
+   viewport scrolls to the top of the form instead of clipping it — which is
+   what centring does when the content overflows. */
 .auth__card {
   width: min(24rem, 100%);
+  margin: auto;
 }
 .auth__card h1 {
   font-size: 1.5rem;
@@ -5169,9 +5636,13 @@ input[type='search'] {
     display: none;
   }
   .auth__panel {
-    min-height: 100vh;
+    min-height: 0;
   }
-  .auth__mobile-brand {
+  /* Scoped to .auth so it outweighs the base `display: none` below, which is
+     declared after this block at the same specificity and was therefore
+     winning — the mobile brand had never rendered, leaving the narrow layout
+     with no logo at all once .auth__art is hidden. */
+  .auth .auth__mobile-brand {
     display: flex;
   }
 }
@@ -5285,7 +5756,7 @@ input[type='search'] {
   transition: width 0.8s var(--ease-out);
 }
 .rank__rail i[data-accent] {
-  background: var(--gradient-gold);
+  background: var(--gradient-accent);
 }
 
 .stack-bar {
@@ -5326,10 +5797,109 @@ input[type='search'] {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Donut ----------------------------------------------------------------
+   Ring plus legend. The arcs are drawn as dashed circles, so the tone scale
+   below has to reach them through `stroke`, not `background` — hence the
+   separate block for .donut__arc.
+   ------------------------------------------------------------------------- */
+
+.donut {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.donut__ring {
+  position: relative;
+  flex: none;
+  width: clamp(9rem, 34%, 12rem);
+  aspect-ratio: 1;
+}
+.donut__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.donut__arc {
+  transition: stroke-dasharray 0.9s var(--ease-out);
+}
+/* The figure the chart exists to report, in the hole. */
+.donut__centre {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.donut__centre strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: var(--lh-metric);
+  letter-spacing: var(--ls-metric);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.donut__centre span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.donut__legend {
+  flex: 1 1 11rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+}
+.donut__legend li {
+  display: grid;
+  grid-template-columns: 0.65rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+}
+.donut__legend i {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 3px;
+}
+.donut__legend-label {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.donut__legend strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.donut__legend-pct {
+  min-width: 2.6rem;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The arcs are strokes, so they need the tone scale applied as stroke. */
+.donut__arc[data-tone='booked'] { stroke: var(--accent); }
+.donut__arc[data-tone='available'] { stroke: var(--ok); }
+.donut__arc[data-tone='reserved'] { stroke: var(--warn); }
+.donut__arc[data-tone='blocked'] { stroke: var(--line-strong); }
+.donut__arc[data-tone='accent'] { stroke: var(--accent); }
+
 /* One tone scale shared by the stacked bar and its legend, so a swatch always
    means the same thing as the segment it labels. */
 [data-tone='booked'] {
-  background: var(--brand);
+  background: var(--accent);
 }
 [data-tone='available'] {
   background: var(--ok);
@@ -5524,7 +6094,7 @@ input[type='search'] {
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent-light);
+  color: var(--accent-on-dark);
 }
 /* The chip carries a person's full name, which can be longer than the space
    there is for it. Truncating beats pushing the brand off the bar. */
@@ -5809,7 +6379,9 @@ input[type='search'] {
    like the same document. */
 .confirm-art {
   margin: 0;
-  aspect-ratio: 1200 / 300;
+  /* Was 4:1, sized for the printed ticket banner. A photograph needs room to
+     be a photograph. */
+  aspect-ratio: 16 / 9;
   overflow: hidden;
 }
 .confirm-art img {
@@ -5916,10 +6488,13 @@ input[type='search'] {
   align-items: start;
   padding: var(--space-6);
   border-radius: var(--radius-lg);
+  /* Was a dark slab. In a light console it was the only black rectangle on
+     the page and read as an error state rather than a shortcuts panel. */
   background:
-    radial-gradient(38rem 20rem at 88% -30%, rgba(224, 172, 76, 0.22), transparent 65%),
-    var(--gradient-brand);
-  box-shadow: var(--shadow);
+    radial-gradient(38rem 20rem at 88% -30%, var(--accent-wash), transparent 65%),
+    var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
 }
 @media (max-width: 68rem) {
   .quick-deck {
@@ -5929,7 +6504,7 @@ input[type='search'] {
 }
 
 .quick-deck__intro {
-  color: #fff;
+  color: var(--ink);
 }
 .quick-deck__eyebrow {
   margin: 0 0 var(--space-2);
@@ -5937,7 +6512,7 @@ input[type='search'] {
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--accent-light);
+  color: var(--accent);
 }
 .quick-deck__intro h2 {
   margin: 0;
@@ -5946,11 +6521,11 @@ input[type='search'] {
   line-height: 1.2;
   letter-spacing: -0.01em;
 }
-.quick-deck__intro p {
+.quick-deck__intro p:not(.quick-deck__eyebrow) {
   margin: var(--space-3) 0 0;
   font-size: 0.8125rem;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
 }
 
 .quick-deck__grid {
@@ -5966,10 +6541,10 @@ input[type='search'] {
   gap: var(--space-3);
   padding: var(--space-4);
   text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  background: var(--surface-2);
+  color: var(--ink);
   font: inherit;
   cursor: pointer;
   transition:
@@ -5979,8 +6554,8 @@ input[type='search'] {
 }
 .quick-card:hover,
 .quick-card:focus-visible {
-  background: rgba(255, 255, 255, 0.13);
-  border-color: var(--accent-light);
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
   transform: translateY(-2px);
 }
 .quick-card:focus-visible {
@@ -5989,11 +6564,18 @@ input[type='search'] {
 }
 
 /* Overrides the pale wash the export-card icon carries on white surfaces. */
+/* Filled, not washed: on a white card a pale chip with a pale mark is the
+   quietest thing in the row, and these are the four actions the console
+   exists for. White mark on solid violet is 7.1:1. */
 .quick-card__icon.export-card__icon {
   width: 2.25rem;
   height: 2.25rem;
-  background: rgba(224, 172, 76, 0.18);
-  color: var(--accent-light);
+  background: var(--gradient-accent);
+  color: #fff;
+  box-shadow: 0 6px 14px -8px var(--accent-glow);
+}
+.quick-card:hover .quick-card__icon.export-card__icon {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
 }
 
 .quick-card__text {
@@ -6008,20 +6590,20 @@ input[type='search'] {
 .quick-card__text span {
   font-size: 0.75rem;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--muted);
 }
 
 .quick-card__go {
   width: 1rem;
   height: 1rem;
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: var(--line-strong);
   -webkit-mask: url('/assets/icons/chevron.svg') center / contain no-repeat;
   mask: url('/assets/icons/chevron.svg') center / contain no-repeat;
   transform: rotate(-90deg);
   transition: background-color var(--t-fast) ease, transform var(--t) var(--ease-out);
 }
 .quick-card:hover .quick-card__go {
-  background-color: var(--accent-light);
+  background-color: var(--accent);
   transform: rotate(-90deg) translateY(-3px);
 }
 

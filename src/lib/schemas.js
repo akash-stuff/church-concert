@@ -32,6 +32,20 @@ const password = z
 
 const email = z.string().trim().toLowerCase().email('Enter a valid email address.').max(190);
 
+/**
+ * Optional, and blank counts as absent.
+ *
+ * A plain `.optional()` is not enough: the browser posts every text field it
+ * has, so an untouched input arrives as '' rather than going missing, and ''
+ * then fails the inner rules (min length, phone format) instead of being
+ * treated as "left empty". Anything actually typed is still validated in full.
+ */
+const optional = (schema) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    schema.optional(),
+  );
+
 const isoDate = z
   .string()
   .trim()
@@ -53,8 +67,10 @@ const registerSchema = z.object({
   password,
   date_of_birth: isoDate,
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']),
-  address: trimmed(5, 500),
-  emergency_contact: phone,
+  // Optional. Nothing in booking, seating, check-in or the ticket reads either
+  // of these, so requiring them only cost sign-ups.
+  address: optional(trimmed(5, 500)),
+  emergency_contact: optional(phone),
   accept_terms: z.literal(true, { errorMap: () => ({ message: 'Accept the terms to continue.' }) }),
   confirm_age: z.literal(true, {
     errorMap: () => ({ message: 'Confirm that you are 18 or older.' }),
@@ -98,8 +114,8 @@ const updateProfileSchema = z
     full_name: trimmed(2, 120).optional(),
     mobile_number: phone.optional(),
     whatsapp_number: phone.optional(),
-    address: trimmed(5, 500).optional(),
-    emergency_contact: phone.optional(),
+    address: optional(trimmed(5, 500)),
+    emergency_contact: optional(phone),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'Nothing to update.' });
 

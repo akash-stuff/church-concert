@@ -245,7 +245,7 @@
       el('legend', { class: 'guest-card__legend' }, [
         el('b', { text: seat.seat_number }),
         el('span', { text: seat.section_name || '' }),
-        mine ? el('i', { class: 'chip chip--gold', text: 'You' }) : null,
+        mine ? el('i', { class: 'chip chip--accent', text: 'You' }) : null,
       ]),
       field('name', 'Full name', 'text', mine ? user.full_name : ''),
       field('email', 'Email', 'email', mine ? user.email : ''),

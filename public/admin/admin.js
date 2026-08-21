@@ -56,25 +56,23 @@
   const PANELS = {
     overview: { title: 'Overview' },
     concerts: { title: 'Concerts' },
-    seats: { title: 'Seat Management' },
+    seats: { title: 'Seats' },
     bookings: { title: 'Bookings' },
     attendees: { title: 'Attendees' },
     notifications: { title: 'Notifications' },
-    reports: { title: 'Reports & Export' },
+    reports: { title: 'Reports' },
     settings: { title: 'Settings' },
   };
 
-  // The bundled posters, used when a concert has none of its own. Chosen by id
-  // rather than at random so a concert keeps the same picture between reloads.
-  const POSTERS = [
-    '/assets/posters/choir-night.svg',
-    '/assets/posters/carols.svg',
-    '/assets/posters/strings.svg',
-    '/assets/posters/organ-recital.svg',
-    '/assets/posters/gospel-evening.svg',
-  ];
+  // Every concert shows one image: the photograph an admin uploaded, or the
+  // house default until they upload one. A poster_path that is not an upload is
+  // a leftover from the old bundled artwork and is treated as absent, so a
+  // concert still pointing at a deleted illustration falls back cleanly.
+  const DEFAULT_POSTER = '/assets/photos/hands-bibles.jpg';
   const posterFor = (concert) =>
-    concert.poster_path || POSTERS[(Number(concert.id) || 0) % POSTERS.length];
+    (concert.poster_path || '').startsWith('/assets/posters/uploads/')
+      ? concert.poster_path
+      : DEFAULT_POSTER;
 
   // ==========================================================================
   // Small helpers
@@ -303,6 +301,7 @@
       title: 'Sign out?',
       message: `You are signed in as ${state.admin?.full_name || 'an administrator'}. Signing out ends this session on this device.`,
       confirmLabel: 'Sign out',
+      danger: true,
     });
     if (!ok) return;
     await api('/api/auth/admin/logout', { method: 'POST' }).catch(() => {});
@@ -369,13 +368,25 @@
   // Overview
   // ==========================================================================
 
-  function kpiCard({ label, value, icon, meta, delta, rail, feature }) {
-    const card = el('article', { class: `kpi${feature ? ' kpi--feature' : ''}` }, [
-      el('div', { class: 'kpi__top' }, [
-        el('p', { class: 'kpi__label', text: label }),
-        el('span', { class: 'kpi__icon', 'data-kpi-icon': icon, 'aria-hidden': 'true' }),
-      ]),
+  function kpiCard({ label, value, icon, tint, meta, delta, rail, feature, goto, gotoLabel }) {
+    // Chip on the left, text stacked beside it. The text column is its own
+    // element so the chip stays top-aligned however many lines the meta runs to.
+    const text = el('div', { class: 'kpi__text' }, [
+      el('p', { class: 'kpi__label', text: label }),
       el('p', { class: 'kpi__value', text: String(value) }),
+    ]);
+
+    const card = el('article', {
+      class: `kpi${feature ? ' kpi--feature' : ''}${goto ? ' kpi--link' : ''}`,
+    }, [
+      el('div', { class: 'kpi__top' }, [
+        el('span', {
+          class: `kpi__icon${tint ? ` kpi__icon--${tint}` : ''}`,
+          'data-kpi-icon': icon,
+          'aria-hidden': 'true',
+        }),
+        text,
+      ]),
     ]);
 
     if (meta || delta) {
@@ -389,7 +400,7 @@
         );
       }
       if (meta) row.append(el('span', { text: meta }));
-      card.append(row);
+      text.append(row);
     }
 
     if (rail !== undefined) {
@@ -397,6 +408,20 @@
       const rails = el('div', { class: 'kpi__rail' }, [fill]);
       card.append(rails);
       requestAnimationFrame(() => setWidth(fill, rail));
+    }
+
+    // The hit target is last in the DOM so it sits over the card, and carries
+    // the whole sentence as its label: a screen reader announcing just "View"
+    // five times over would say nothing useful.
+    if (goto) {
+      card.append(
+        el('button', {
+          class: 'kpi__hit',
+          type: 'button',
+          'aria-label': `${label}: ${value}. ${gotoLabel || `Open ${goto}`}.`,
+          onclick: () => setTab(goto),
+        }),
+      );
     }
 
     paintAllIcons(card);
@@ -437,13 +462,19 @@
         label: 'Total concerts',
         value: concerts.length,
         icon: 'music',
+        tint: 'violet',
         meta: `${live.length} active`,
+        goto: 'concerts',
+        gotoLabel: 'View all concerts',
       }),
       kpiCard({
         label: 'Total bookings',
         value: totals.parties,
         icon: 'ticket',
+        tint: 'pink',
         meta: 'parties holding seats',
+        goto: 'bookings',
+        gotoLabel: 'View all bookings',
         delta: {
           direction: upcoming.bookings.parties > 0 ? 'up' : 'flat',
           label: `${upcoming.bookings.parties} in 30d`,
@@ -453,21 +484,30 @@
         label: 'Seats reserved',
         value: totals.booked,
         icon: 'seat',
+        tint: 'orange',
         meta: `of ${totals.capacity} capacity`,
         rail: occupancy,
+        goto: 'seats',
+        gotoLabel: 'View the seat map',
       }),
       kpiCard({
         label: 'Available seats',
         value: totals.available,
         icon: 'check',
+        tint: 'green',
         meta: `${totals.blocked} blocked · ${totals.reserved} held`,
+        goto: 'seats',
+        gotoLabel: 'View the seat map',
       }),
       kpiCard({
         label: 'Occupancy',
         value: `${occupancy}%`,
         icon: 'gauge',
+        tint: 'blue',
         feature: true,
         meta: 'across every concert',
+        goto: 'reports',
+        gotoLabel: 'Open reports and export',
         rail: occupancy,
         delta: {
           direction: occupancy >= 80 ? 'up' : occupancy >= 40 ? 'flat' : 'down',
@@ -508,12 +548,21 @@
   }
 
   function drawOccupancy(box, totals) {
-    UI.stackChart(box, [
-      { label: 'Booked', value: totals.booked, tone: 'booked' },
-      { label: 'Available', value: totals.available, tone: 'available' },
-      { label: 'Held', value: totals.reserved, tone: 'reserved' },
-      { label: 'Blocked', value: totals.blocked, tone: 'blocked' },
-    ]);
+    // A donut rather than a stacked bar: four slices of one whole is what a
+    // ring is for, and the hole carries the occupancy figure that the panel
+    // was previously making you work out from the bar widths.
+    const filled = totals.booked + totals.reserved;
+    const capacity = totals.booked + totals.available + totals.reserved + totals.blocked;
+    UI.donutChart(
+      box,
+      [
+        { label: 'Booked', value: totals.booked, tone: 'booked' },
+        { label: 'Available', value: totals.available, tone: 'available' },
+        { label: 'Held', value: totals.reserved, tone: 'reserved' },
+        { label: 'Blocked', value: totals.blocked, tone: 'blocked' },
+      ],
+      { headline: `${pct(filled, capacity)}%`, caption: 'Taken' },
+    );
   }
 
   function concertTile(concert) {
@@ -938,9 +987,10 @@
   }
 
   /**
-   * Poster chooser: one of the bundled illustrations, or a photograph uploaded
-   * from disk. The upload is read here and posted as a data URI — the server
-   * decodes it, checks the type and size, and writes the file.
+   * Poster chooser. There is nothing to choose between any more — a concert has
+   * either a photograph of its own or the house default — so this is an upload
+   * and a way to undo it. The file is read here and posted as a data URI; the
+   * server decodes it, checks the type and size, and writes it to disk.
    */
   function posterPicker(concert) {
     const preview = el('img', {
@@ -950,21 +1000,6 @@
       height: 450,
       class: 'poster',
     });
-
-    const choose = async (path) => {
-      try {
-        await api(`/api/admin/concerts/${concert.id}`, {
-          method: 'PATCH',
-          body: { poster_path: path },
-        });
-        concert.poster_path = path;
-        preview.src = posterFor(concert);
-        UI.toastSuccess('Poster updated');
-        invalidate('overview', 'concerts');
-      } catch (error) {
-        UI.toastError('Could not set the poster', error.message);
-      }
-    };
 
     const file = el('input', {
       type: 'file',
@@ -997,33 +1032,45 @@
       reader.readAsDataURL(chosen);
     });
 
-    const thumbs = el('div', { class: 'grid-3' });
-    for (const path of POSTERS) {
-      const button = el('button', {
-        type: 'button',
-        class: 'poster-choice',
-        'aria-label': `Use the ${path.split('/').pop().replace('.svg', '').replace('-', ' ')} artwork`,
-        onClick: () => choose(path),
-      });
-      button.append(el('img', { src: path, alt: '', width: 800, height: 450 }));
-      thumbs.append(button);
-    }
+    // Removing the upload deletes the file server-side and clears poster_path,
+    // which puts the default back. Only offered when there is one to remove.
+    const remove = el('button', {
+      type: 'button',
+      class: 'btn btn--quiet btn--small',
+      text: 'Remove photo',
+      onClick: async () => {
+        try {
+          await api(`/api/admin/concerts/${concert.id}/poster`, { method: 'DELETE' });
+          concert.poster_path = null;
+          preview.src = DEFAULT_POSTER;
+          remove.hidden = true;
+          UI.toastSuccess('Photo removed', 'The default image is back.');
+          invalidate('overview', 'concerts');
+        } catch (error) {
+          UI.toastError('Could not remove the photo', error.message);
+        }
+      },
+    });
+    remove.hidden = !(concert.poster_path || '').startsWith('/assets/posters/uploads/');
 
     return el('div', { class: 'stack' }, [
-      el('h3', { text: 'Poster' }),
+      el('h3', { text: 'Concert image' }),
       preview,
       el('div', { class: 'u-flex' }, [
-        el('label', { class: 'btn btn--ghost btn--small', for: 'poster-file', text: 'Upload a photo' }),
-        file,
-        el('button', {
-          type: 'button',
-          class: 'btn btn--quiet btn--small',
-          text: 'Use bundled artwork',
-          onClick: () => choose(POSTERS[(Number(concert.id) || 0) % POSTERS.length]),
+        el('label', {
+          class: 'btn btn--ghost btn--small',
+          for: 'poster-file',
+          text: 'Upload a photo',
         }),
+        file,
+        remove,
       ]),
-      el('p', { class: 'field__hint', text: 'PNG, JPEG or WebP, up to 2 MB. Or pick one of these:' }),
-      thumbs,
+      el('p', {
+        class: 'field__hint',
+        text:
+          'PNG, JPEG or WebP, up to 2 MB. Landscape 16:9 looks best. ' +
+          'Without one, every concert shows the same house image.',
+      }),
     ]);
   }
 
@@ -1383,6 +1430,7 @@
             class: 'zone__count',
             text: `${section.seats.filter((s) => s.status === 'AVAILABLE').length} of ${section.seats.length} free`,
           }),
+          iconButton('trash', `Delete the ${section.name} section`, () => deleteSection(section)),
         ]),
       ]);
 
@@ -1595,6 +1643,51 @@
       await refreshSeatMap();
     } catch (error) {
       UI.toastError('Could not release the seat', error.message);
+    }
+  }
+
+  /**
+   * Delete a section, and every seat laid out in it.
+   *
+   * The server refuses if any seat in the section still has a live booking, so
+   * the dangerous case is already closed on that side. The count in the prompt
+   * is what makes it honest here: "delete VIP" reads much smaller than "delete
+   * VIP and the 48 seats in it".
+   */
+  async function deleteSection(section) {
+    const seats = section.seats ? section.seats.length : 0;
+    const taken = section.seats
+      ? section.seats.filter((s) => s.status === 'BOOKED' || s.status === 'RESERVED').length
+      : 0;
+
+    if (taken > 0) {
+      UI.toastError(
+        `${section.name} is in use`,
+        `${taken} of its seats are booked or held. Release them before deleting the section.`,
+      );
+      return;
+    }
+
+    const ok = await UI.confirm({
+      title: `Delete the ${section.name} section?`,
+      message: seats
+        ? `Its ${seats} seat${seats === 1 ? '' : 's'} go with it. Nothing is booked in this section, so nobody loses a seat, but the layout cannot be undone.`
+        : 'This section has no seats laid out yet, so nothing else goes with it.',
+      confirmLabel: 'Delete section',
+      danger: true,
+    });
+    if (!ok) return;
+
+    try {
+      await api(`/api/admin/sections/${section.id}`, { method: 'DELETE' });
+      UI.toastSuccess(`${section.name} deleted`);
+      // The zone filter may have been pointing at the section that just went.
+      if (String(state.seat.zone) === String(section.id)) state.seat.zone = 'all';
+      state.seat.selected = null;
+      invalidate('overview', 'concerts', 'reports');
+      await refreshSeatMap();
+    } catch (error) {
+      UI.toastError('Could not delete the section', error.message);
     }
   }
 
@@ -2210,17 +2303,105 @@
       return;
     }
     try {
-      const result = await api(`/api/admin/notifications/remind?concert_id=${row.concert_id || state.concertId}`, {
-        method: 'POST',
-        body: {},
-      });
-      UI.toastSuccess('Reminder queued', result.message || 'The confirmation has been re-sent.');
+      // One person, not the whole concert. This used to post to
+      // /notifications/remind, which is the concert-wide reminder broadcast.
+      const result = await api(
+        `/api/admin/bookings/${encodeURIComponent(row.booking_reference)}/resend`,
+        { method: 'POST', body: {} },
+      );
+      UI.toastSuccess('Confirmation re-sent', result.message || `Sent to ${row.full_name}.`);
       invalidate('notifications');
       refreshUnread();
+      // Show what actually went out, rather than asking staff to take a toast's
+      // word for it and go hunting in the Notifications tab.
+      deliveryDrawer(row, result);
     } catch (error) {
       UI.toastError('Could not resend the confirmation', error.message);
     }
   }
+
+  /**
+   * The delivery rail: what has been sent to this attendee, newest first.
+   *
+   * Opened straight after a resend so the outcome is visible where the action
+   * happened. It reads the notification log rather than the send result, so a
+   * message that was accepted and then failed at the provider shows as failed
+   * once the row is refreshed.
+   */
+  function deliveryDrawer(row, result) {
+    const name = row.full_name || 'this attendee';
+
+    UI.drawer({
+      title: 'Notifications',
+      subtitle: `Everything sent to ${name}, newest first.`,
+      render: async (body) => {
+        body.append(
+          el('div', { class: 'notice notice--success' }, [
+            el('strong', { text: 'Confirmation re-sent. ' }),
+            el('span', {
+              text: `${result.reference} · seat${result.seats && result.seats.length === 1 ? '' : 's'} ${
+                (result.seats || []).join(', ') || '—'
+              }`,
+            }),
+          ]),
+        );
+
+        const list = el('div', { class: 'stack' });
+        body.append(list);
+        UI.skeleton(list, { kind: 'row', count: 4 });
+
+        try {
+          const data = await api(
+            `/api/admin/notifications?search=${encodeURIComponent(name)}&per_page=15`,
+          );
+          list.textContent = '';
+          const rows = data.notifications || [];
+          if (!rows.length) {
+            UI.empty(list, {
+              title: 'Nothing logged yet',
+              message: 'The send was accepted but has not reached the log. Reopen in a moment.',
+              icon: 'bell',
+            });
+            return;
+          }
+          for (const n of rows) {
+            list.append(
+              el('div', { class: 'delivery-row' }, [
+                el('div', {}, [
+                  el('strong', { text: String(n.type || '').replace(/_/g, ' ').toLowerCase() }),
+                  el('div', { class: 'delivery-row__meta', text: `${n.channel} · ${n.recipient_masked || n.recipient || '—'}` }),
+                ]),
+                el('div', { class: 'delivery-row__right' }, [
+                  el('span', { class: `chip chip--${notifTone(n.status)}`, text: String(n.status || '').toLowerCase() }),
+                  el('div', { class: 'delivery-row__meta', text: formatShortDate(n.sent_at || n.created_at) }),
+                ]),
+              ]),
+            );
+          }
+        } catch (error) {
+          UI.failure(list, { message: error.message });
+        }
+      },
+      actions: [
+        { label: 'Close', onClick: ({ close }) => close() },
+        {
+          label: 'Open notifications',
+          variant: 'primary',
+          onClick: ({ close }) => {
+            close();
+            setTab('notifications');
+          },
+        },
+      ],
+    });
+  }
+
+  const notifTone = (status) => {
+    const s = String(status || '').toUpperCase();
+    if (s === 'FAILED') return 'off';
+    if (s === 'DELIVERED' || s === 'READ' || s === 'SENT') return 'ok';
+    return 'wait';
+  };
 
   async function cancelBooking(row) {
     const ok = await UI.confirm({
@@ -2736,12 +2917,25 @@
 
     kpis.textContent = '';
     kpis.append(
-      kpiCard({ label: 'Total bookings', value: summary.bookings.parties, icon: 'ticket', meta: 'parties' }),
-      kpiCard({ label: 'Seats reserved', value: summary.bookings.live_seats, icon: 'seat', meta: 'currently held' }),
+      kpiCard({
+        label: 'Total bookings',
+        value: summary.bookings.parties,
+        icon: 'ticket',
+        tint: 'pink',
+        meta: 'parties',
+      }),
+      kpiCard({
+        label: 'Seats reserved',
+        value: summary.bookings.live_seats,
+        icon: 'seat',
+        tint: 'orange',
+        meta: 'currently held',
+      }),
       kpiCard({
         label: 'Occupancy',
         value: `${summary.capacity.occupancy}%`,
         icon: 'gauge',
+        tint: 'blue',
         feature: true,
         rail: summary.capacity.occupancy,
         meta: `${summary.capacity.remaining} seats free`,
@@ -2750,6 +2944,7 @@
         label: 'Cancellations',
         value: summary.bookings.cancelled_seats,
         icon: 'alert',
+        tint: 'red',
         meta: `${summary.bookings.cancellation_rate}% of all seat rows`,
         delta: {
           direction: summary.bookings.cancellation_rate > 15 ? 'down' : 'flat',
@@ -2760,6 +2955,7 @@
         label: 'Registered attendees',
         value: summary.people.registered,
         icon: 'users',
+        tint: 'green',
         meta: `${summary.people.whatsapp_verified} WhatsApp verified`,
       }),
     );
@@ -3175,7 +3371,7 @@
   const ROLE_COPY = {
     SUPER_ADMIN: {
       label: 'Super admin',
-      tone: 'chip--gold',
+      tone: 'chip--accent',
       blurb: 'The whole console, and can create, change and remove other logins.',
     },
     ADMIN: {

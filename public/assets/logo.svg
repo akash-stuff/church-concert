@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" role="img" aria-label="Night of Worship mark">
   <defs>
     <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6366F1"/>
-      <stop offset="0.45" stop-color="#4338CA"/>
-      <stop offset="1" stop-color="#312E81"/>
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.45" stop-color="#6D28D9"/>
+      <stop offset="1" stop-color="#5B21B6"/>
     </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#EAB54A"/>
-      <stop offset="1" stop-color="#B8860B"/>
+    <linearGradient id="halo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EDE9FE"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
     </linearGradient>
     <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
@@ -18,7 +18,8 @@
   <rect x="1" y="1" width="38" height="38" rx="12" fill="url(#gloss)"/>
   <!-- The cross, set slightly low so the halo above it has room. -->
   <path d="M18.4 11.4h3.2v5.2h5.2v3.2h-5.2v11.4h-3.2V19.8h-5.2v-3.2h5.2z" fill="#fff"/>
-  <!-- A halo arc and a single point of gold: the concert, not just the church. -->
-  <path d="M12.6 9.4a9.6 9.6 0 0114.8 0" stroke="url(#gold)" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".9"/>
-  <circle cx="30.6" cy="9.8" r="1.9" fill="url(#gold)"/>
+  <!-- The halo arc and its point of light. Tonal rather than a second hue: the
+       mark is one colour now, and a contrasting accent on violet muddied it. -->
+  <path d="M12.6 9.4a9.6 9.6 0 0114.8 0" stroke="url(#halo)" stroke-width="1.8" stroke-linecap="round" fill="none" opacity=".95"/>
+  <circle cx="30.6" cy="9.8" r="1.9" fill="url(#halo)"/>
 </svg>

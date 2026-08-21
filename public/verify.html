@@ -35,14 +35,25 @@
 
         <div class="notice" data-notice></div>
 
+        <figure class="verify-art">
+          <img
+            src="/assets/photos/rosary-hands.jpg"
+            alt=""
+            aria-hidden="true"
+            width="933"
+            height="1400"
+            loading="lazy"
+          />
+        </figure>
+
         <div class="card">
           <form id="verify-form" novalidate>
             <div class="field">
               <label for="code">Verification code</label>
-              <span class="field__control field__control--inline">
-                <span class="field__icon" data-icon="key" aria-hidden="true"></span>
+              <div class="otp" data-otp>
+                <div class="otp__boxes" data-otp-boxes aria-hidden="true"></div>
                 <input
-                  class="code-input"
+                  class="otp__input"
                   id="code"
                   name="code"
                   type="text"
@@ -50,8 +61,12 @@
                   autocomplete="one-time-code"
                   maxlength="8"
                   required
+                  aria-describedby="code-hint"
                 />
-              </span>
+              </div>
+              <p class="field__hint" id="code-hint">
+                Type or paste the code. It submits itself once the last digit is in.
+              </p>
               <span class="field__error" data-error-for="code"></span>
             </div>
 
@@ -77,8 +92,6 @@
       <div class="wrap">Grace Community Church · <a href="/">Home</a></div>
     </footer>
 
-    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
-    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
 
     <script src="/js/core.js"></script>
     <script src="/js/verify.js"></script>

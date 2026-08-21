@@ -135,7 +135,7 @@ router.get(
   asyncRoute(async (req, res) => {
     if (!req.user) return res.json({ user: null });
     const settings = await getSettings();
-    const bookings = await bookingService.getUserBookings(req.user.id);
+    const bookings = await bookingService.getUserBookings(req.user.id, { scope: 'upcoming' });
     return res.json({
       user: publicUser(req.user),
       bookings,
@@ -143,6 +143,9 @@ router.get(
       // A person may hold seats at several concerts now, so holding one booking
       // no longer stops them booking again.
       can_book: Boolean(req.user.whatsapp_verified),
+      // The verify page draws one box per digit, so it has to be told how many
+      // there are. Not a secret: anyone who receives a code can count them.
+      otp_length: env.otp.length,
       requires_whatsapp_verification: settings.require_whatsapp_verification,
       allow_self_cancel: settings.allow_user_self_cancel,
     });
@@ -348,6 +351,23 @@ router.get(
   asyncRoute(async (req, res) => {
     const concertId = req.query.concert_id ? Number(req.query.concert_id) : null;
     const bookings = await bookingService.getUserBookings(req.user.id, { concertId });
+    res.json({
+      bookings,
+      seat_count: bookings.reduce((total, party) => total + party.seat_count, 0),
+    });
+  }),
+);
+
+/**
+ * Past bookings: concerts that have been and gone, plus anything cancelled or
+ * expired. Read-only — nothing here can be changed, so there is no seat_count
+ * and no cancel affordance, only a record of what happened.
+ */
+router.get(
+  '/bookings/mine/history',
+  auth.requireUser,
+  asyncRoute(async (req, res) => {
+    const bookings = await bookingService.getUserBookings(req.user.id, { scope: 'past' });
     res.json({
       bookings,
       seat_count: bookings.reduce((total, party) => total + party.seat_count, 0),

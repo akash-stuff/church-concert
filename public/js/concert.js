@@ -1,5 +1,8 @@
 'use strict';
 
+/** Shown on every concert that has no uploaded photograph of its own. */
+const DEFAULT_POSTER = '/assets/photos/hands-bibles.jpg';
+
 (async function initConcertPage() {
   const { api, $, el, notify, formatDate, formatTime, renderSeatMap, mountHeader } = window.CC;
 
@@ -18,20 +21,21 @@
   document.title = `${concert.name} — details`;
   $('[data-concert-name]').textContent = concert.name;
 
-  // The concert's own poster if it has one, otherwise one of the bundled
-  // illustrations picked from its id — so a given concert always shows the same
-  // artwork rather than shuffling between reloads.
-  const POSTERS = [
-    '/assets/posters/choir-night.svg',
-    '/assets/posters/carols.svg',
-    '/assets/posters/strings.svg',
-    '/assets/posters/organ-recital.svg',
-    '/assets/posters/gospel-evening.svg',
-  ];
+  // One image per concert: the photograph an admin uploaded, or the house
+  // default until they do. Anything in poster_path that is not an upload is a
+  // leftover from the old bundled artwork and is ignored, so a concert still
+  // pointing at a deleted illustration falls back rather than showing a gap.
   const poster = $('[data-concert-poster]');
   if (poster) {
-    poster.src = concert.poster_path || POSTERS[(Number(concert.id) || 0) % POSTERS.length];
-    poster.alt = `Artwork for ${concert.name}`;
+    const uploaded = (concert.poster_path || '').startsWith('/assets/posters/uploads/');
+    poster.src = uploaded ? concert.poster_path : DEFAULT_POSTER;
+    poster.alt = uploaded ? `Photograph for ${concert.name}` : '';
+    // A file that has been deleted from disk should not leave a broken image.
+    poster.addEventListener('error', () => {
+      if (poster.src.endsWith(DEFAULT_POSTER)) return;
+      poster.src = DEFAULT_POSTER;
+      poster.alt = '';
+    });
   }
   $('[data-concert-description]').textContent =
     concert.description || 'Details for this concert are being finalised.';

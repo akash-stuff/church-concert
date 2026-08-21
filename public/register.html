@@ -76,11 +76,12 @@
               </div>
 
               <div class="field">
-                <label for="address">Address</label>
+                <label for="address">Address <span class="field__optional">optional</span></label>
                 <span class="field__control">
                   <span class="field__icon" data-icon="home" aria-hidden="true"></span>
-                  <textarea id="address" name="address" autocomplete="street-address" required></textarea>
+                  <textarea id="address" name="address" autocomplete="street-address"></textarea>
                 </span>
+                <p class="field__hint">Only used if the church needs to write to you.</p>
                 <span class="field__error" data-error-for="address"></span>
               </div>
             </fieldset>
@@ -133,10 +134,12 @@
               </div>
 
               <div class="field">
-                <label for="emergency_contact">Emergency contact number</label>
+                <label for="emergency_contact">
+                  Emergency contact number <span class="field__optional">optional</span>
+                </label>
                 <span class="field__control field__control--inline">
                   <span class="field__icon" data-icon="lifebuoy" aria-hidden="true"></span>
-                  <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                  <input id="emergency_contact" name="emergency_contact" type="tel" />
                 </span>
                 <p class="field__hint">Someone we can call on the night if you need help.</p>
                 <span class="field__error" data-error-for="emergency_contact"></span>
@@ -201,8 +204,6 @@
       </div>
     </footer>
 
-    <img class="page-deco page-deco--church" src="/assets/church.svg" alt="" aria-hidden="true" />
-    <img class="page-deco page-deco--sprig" src="/assets/sprig.svg" alt="" aria-hidden="true" />
 
 
     <script src="/js/core.js"></script>

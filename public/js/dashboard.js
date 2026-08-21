@@ -87,6 +87,105 @@
     );
   }
 
+  // --------------------------------------------------------------------------
+  // Past bookings
+  //
+  // Concerts that have been and gone, plus anything cancelled or expired. A
+  // separate request from /api/me: it is not needed to render the page, so it
+  // must not hold the page up, and most visits will never look at it.
+  // --------------------------------------------------------------------------
+  const PAST_LABELS = {
+    CANCELLED: { text: 'Cancelled', className: 'pill pill--off' },
+    EXPIRED: { text: 'Expired', className: 'pill pill--neutral' },
+  };
+  const ATTENDED = { text: 'Attended', className: 'pill pill--ok' };
+
+  async function renderHistory() {
+    const card = $('[data-history-card]');
+    const body = $('[data-history-body]');
+    const pill = $('[data-history-pill]');
+
+    let parties = [];
+    try {
+      const result = await api('/api/bookings/mine/history');
+      parties = result.bookings || [];
+    } catch {
+      // History is a nicety. If it fails the rest of the dashboard is still
+      // fine, and a broken empty card says less than no card at all.
+      return;
+    }
+
+    if (!parties.length) {
+      card.hidden = true;
+      return;
+    }
+
+    card.hidden = false;
+    body.textContent = '';
+    pill.textContent = '';
+    pill.append(
+      el('span', {
+        class: 'pill pill--neutral',
+        text: `${parties.length} booking${parties.length === 1 ? '' : 's'}`,
+      }),
+    );
+
+    for (const party of parties) {
+      const label = PAST_LABELS[party.status] || ATTENDED;
+      const row = el('div', { class: 'booking-row booking-row--past' });
+
+      const left = el('div', {}, [
+        el('div', { class: 'booking-row__ref', text: party.booking_reference }),
+        el('strong', { text: party.concert.name, style: 'display:block' }),
+        el('div', {
+          class: 'booking-row__when',
+          text: `${formatDate(party.concert.event_date)} · ${party.concert.venue}`,
+        }),
+      ]);
+
+      const tags = el('div', { class: 'seat-tags', style: 'margin-top:0.5rem' });
+      for (const seat of party.seats) {
+        tags.append(
+          el('span', { class: 'seat-tag' }, [
+            el('span', { text: `${seat.seat_number} · ${seat.section_name}` }),
+          ]),
+        );
+      }
+      left.append(tags);
+
+      const footnote =
+        party.status === 'CANCELLED' && party.cancelled_at
+          ? `Cancelled ${formatShortDate(party.cancelled_at)}${
+              party.cancel_reason ? ` · ${party.cancel_reason}` : ''
+            }`
+          : `Booked ${formatShortDate(party.booked_at)}`;
+      left.append(
+        el('div', { class: 'booking-row__when', style: 'margin-top:0.4rem', text: footnote }),
+      );
+
+      const actions = el('div', { class: 'btn-row' }, [
+        el('span', { class: label.className, text: label.text }),
+      ]);
+      // A cancelled booking has no ticket to show: the confirmation endpoint
+      // only resolves references that are still live.
+      if (party.status === 'PENDING' || party.status === 'CONFIRMED') {
+        const reference = encodeURIComponent(party.booking_reference);
+        actions.append(
+          el('a', {
+            class: 'btn btn--ghost btn--small',
+            href: `/api/bookings/mine/confirmation?reference=${reference}`,
+            target: '_blank',
+            rel: 'noopener',
+            text: 'View ticket',
+          }),
+        );
+      }
+
+      row.append(left, actions);
+      body.append(row);
+    }
+  }
+
   function renderBooking() {
     const pill = $('[data-booking-pill]');
     const body = $('[data-booking-body]');
@@ -222,6 +321,7 @@
           ? `Seat ${seats} goes back into the pool straight away. Somebody else may take it, and there is no guarantee you can get it back.`
           : `All ${party.seats.length} seats (${seats}) for ${party.concert.name} go back into the pool straight away. Somebody else may take them.`,
       confirmLabel: party.seats.length === 1 ? 'Release seat' : 'Release all seats',
+      danger: true,
       cancelLabel: 'Keep them',
       danger: true,
     });
@@ -279,6 +379,7 @@
     renderProfile();
     renderWhatsapp();
     renderBooking();
+    renderHistory();
   }
 
   // --- Profile editing ---
@@ -353,4 +454,5 @@
   renderProfile();
   renderWhatsapp();
   renderBooking();
+  renderHistory();
 })();

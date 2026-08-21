@@ -16,23 +16,23 @@
        background images unless the reader ticks "Background graphics", and a
        ticket that loses its branding at the printer is no good.
      * Colour survives via print-color-adjust: exact. Without it the navy
-       header prints white and the gold rules vanish.
+       header prints white and the accent rules vanish.
      * Every horizontal measurement is derived from one gutter token, so the
        masthead, the reference, the facts and the footer share a left edge.
        That single shared edge is most of what "neat" means here.
    ========================================================================= */
 
 :root {
-  --navy: #16233d;
-  --navy-deep: #0d1729;
-  --gold: #b58328;
-  --gold-light: #e0ac4c;
+  --navy: #1b1e3d;
+  --navy-deep: #12142c;
+  --accent: #6d28d9;
+  --accent-light: #a78bfa;  /* light enough to read on the navy masthead */
   --ink: #0f172a;
   --body-ink: #3d4757;
   --muted: #64748b;
   --line: #d8dee8;
   --wash: #f6f8fc;
-  --cream: #fdf9f0;
+  --cream: #f7f5ff;
 
   /* A4 is 210mm; @page trims 12mm a side, leaving 186mm of printable width.
      The sheet spans all of it, and everything inside is inset by one gutter. */
@@ -126,7 +126,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--gold-light);
+  color: var(--accent-light);
 }
 .hero__event {
   margin: 0;
@@ -152,7 +152,7 @@ body {
   align-items: center;
   gap: var(--gutter);
   padding: 7mm var(--gutter);
-  border-bottom: 2px solid var(--gold);
+  border-bottom: 2px solid var(--accent);
   background: linear-gradient(180deg, var(--cream) 0%, #fff 100%);
 }
 .claim__label {
@@ -195,8 +195,8 @@ body {
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
-.badge--gold {
-  background: var(--gold);
+.badge--accent {
+  background: var(--accent);
   color: #fff;
 }
 .badge--quiet {
@@ -392,8 +392,8 @@ body {
   cursor: pointer;
 }
 .btn--primary {
-  background: var(--gold);
-  color: #1c1508;
+  background: var(--accent);
+  color: #ffffff;
 }
 .btn--ghost {
   background: #fff;

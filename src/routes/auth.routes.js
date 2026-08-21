@@ -125,8 +125,10 @@ router.post(
           passwordHash,
           data.date_of_birth,
           data.gender,
-          data.address,
-          data.emergency_contact,
+          // Both are optional; undefined would bind as a driver error, NULL is
+          // the column's own way of saying "not given".
+          data.address ?? null,
+          data.emergency_contact ?? null,
         ],
       );
       userId = result.insertId;

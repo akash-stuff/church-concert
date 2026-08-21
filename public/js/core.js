@@ -395,7 +395,9 @@ async function mountHeader(current) {
         ['#logout', 'Sign out'],
       ]
     : [
-        ['/concert.html', 'The concert'],
+        // No concert link here on purpose. The bar is for getting in — sign in
+        // or register — and the concert page is already one click away from the
+        // hero button and both footers.
         ['/login.html', 'Sign in'],
         ['/register.html', 'Register'],
       ];

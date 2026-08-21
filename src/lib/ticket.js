@@ -93,7 +93,7 @@ ${head(`Ticket ${party.booking_reference} — ${party.concert.name}`)}
       <p class="claim__ref">${esc(party.booking_reference)}</p>
       <p class="claim__name">${esc(holder.full_name)}</p>
       <div class="claim__badges">
-        <span class="badge badge--gold">Admission free</span>
+        <span class="badge badge--accent">Admission free</span>
         <span class="badge badge--quiet">${seatCount} ${seatCount === 1 ? 'seat' : 'seats'}</span>
         <span class="badge badge--quiet">${esc(party.status)}</span>
       </div>

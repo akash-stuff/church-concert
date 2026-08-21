@@ -626,6 +626,99 @@
     container.append(bar, legend);
   }
 
+  /**
+   * Donut chart.
+   *
+   * One ring of arcs plus a legend, and a headline figure in the hole — which
+   * is the only reason to prefer a donut over a pie: the middle is dead space
+   * in a pie and a place to put the answer in a donut.
+   *
+   * Arcs are stroke-dasharray on circles rather than path arcs. A single
+   * <circle> per segment with the right dash offset draws the whole ring with
+   * no trigonometry, and the rounded ends come free from stroke-linecap.
+   */
+  function donutChart(container, segments, options = {}) {
+    container.textContent = '';
+    const parts = segments.map((s) => ({ ...s, value: Number(s.value) || 0 }));
+    const total = parts.reduce((sum, s) => sum + s.value, 0);
+    if (!total) {
+      empty(container, {
+        title: 'No seats yet',
+        message: 'Add seats to a concert to see occupancy.',
+        icon: 'seat',
+      });
+      return;
+    }
+
+    // viewBox units, not pixels: the ring scales with its container.
+    const SIZE = 120;
+    const R = 46;
+    const C = 2 * Math.PI * R;
+    const STROKE = 16;
+
+    const ring = svg('g', { transform: `rotate(-90 ${SIZE / 2} ${SIZE / 2})` });
+    // The track shows through wherever rounded caps leave a sliver.
+    ring.append(
+      svg('circle', {
+        cx: SIZE / 2, cy: SIZE / 2, r: R,
+        fill: 'none', stroke: 'var(--wash)', 'stroke-width': STROKE,
+      }),
+    );
+
+    let offset = 0;
+    for (const part of parts) {
+      if (part.value <= 0) continue;
+      const length = (part.value / total) * C;
+      const arc = svg('circle', {
+        cx: SIZE / 2, cy: SIZE / 2, r: R,
+        fill: 'none',
+        'stroke-width': STROKE,
+        'stroke-dasharray': `${length} ${C - length}`,
+        'stroke-dashoffset': -offset,
+        'data-tone': part.tone,
+        class: 'donut__arc',
+      });
+      arc.append(svg('title', {}, [`${part.label}: ${part.value}`]));
+      ring.append(arc);
+      offset += length;
+    }
+
+    const headline = options.headline ?? `${Math.round((parts[0].value / total) * 100)}%`;
+    const caption = options.caption ?? parts[0].label;
+
+    const figure = svg(
+      'svg',
+      { viewBox: `0 0 ${SIZE} ${SIZE}`, class: 'donut__svg', role: 'img',
+        'aria-label': parts.map((p) => `${p.label} ${p.value}`).join(', ') },
+      [ring],
+    );
+
+    const chart = el('div', { class: 'donut' }, [
+      el('div', { class: 'donut__ring' }, [
+        figure,
+        el('div', { class: 'donut__centre' }, [
+          el('strong', { text: String(headline) }),
+          el('span', { text: caption }),
+        ]),
+      ]),
+      el('ul', { class: 'donut__legend' }),
+    ]);
+
+    const legend = chart.querySelector('.donut__legend');
+    for (const part of parts) {
+      legend.append(
+        el('li', {}, [
+          el('i', { 'data-tone': part.tone }),
+          el('span', { class: 'donut__legend-label', text: part.label }),
+          el('strong', { text: String(part.value) }),
+          el('span', { class: 'donut__legend-pct', text: `${Math.round((part.value / total) * 100)}%` }),
+        ]),
+      );
+    }
+
+    container.append(chart);
+  }
+
   window.UI = {
     toast,
     toastSuccess,
@@ -640,6 +733,7 @@
     lineChart,
     rankChart,
     stackChart,
+    donutChart,
     svg,
     trapFocus,
   };

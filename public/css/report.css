@@ -15,8 +15,8 @@
 }
 
 :root {
-  --navy: #16233d;
-  --gold: #b58328;
+  --navy: #1b1e3d;
+  --accent: #6d28d9;
   --ink: #0f172a;
   --muted: #64748b;
   --line: #d8dee8;
@@ -55,7 +55,7 @@ body {
   gap: 8mm;
   padding-bottom: 3mm;
   margin-bottom: 4mm;
-  border-bottom: 2px solid var(--gold);
+  border-bottom: 2px solid var(--accent);
 }
 .rpt-org {
   margin: 0 0 1mm;
@@ -63,7 +63,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--accent);
 }
 .rpt-title {
   margin: 0;
@@ -178,8 +178,8 @@ body {
   text-decoration: none;
 }
 .btn--primary {
-  background: var(--gold);
-  color: #1c1508;
+  background: var(--accent);
+  color: #ffffff;
 }
 .actions__hint {
   flex: 1 1 14rem;

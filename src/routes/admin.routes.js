@@ -556,6 +556,70 @@ router.get(
   }),
 );
 
+/**
+ * Resend the confirmation for ONE booking.
+ *
+ * The console's per-attendee "Resend confirmation" used to post to
+ * /notifications/remind, which is the whole-concert reminder broadcast — one
+ * click on one person's row messaged every verified attendee at that concert.
+ * This sends the booking confirmation to the single person whose row was
+ * clicked, which is what the button has always claimed to do.
+ */
+router.post(
+  '/bookings/:reference/resend',
+  asyncRoute(async (req, res) => {
+    const reference = String(req.params.reference);
+
+    // One row per seat; the party shares a reference, a user and a concert.
+    const rows = await db.query(
+      `SELECT u.id, u.full_name, u.email, u.whatsapp_number, u.whatsapp_verified,
+              b.concert_id, s.seat_number
+         FROM bookings b
+         JOIN users u ON u.id = b.user_id
+         JOIN seats s ON s.id = b.seat_id
+        WHERE b.booking_reference = ? AND b.status IN ${bookingService.ACTIVE}
+        ORDER BY s.display_order ASC, s.seat_number ASC`,
+      [reference],
+    );
+    if (!rows.length) {
+      throw notFound('That booking does not exist, or it is no longer live.', 'BOOKING_NOT_FOUND');
+    }
+
+    const user = rows[0];
+    if (!user.whatsapp_verified) {
+      throw conflict(
+        'That attendee has not verified their WhatsApp number, so nothing can be delivered yet.',
+        'NOT_VERIFIED',
+      );
+    }
+
+    const concert = await bookingService.getConcert(user.concert_id);
+    const seatNumbers = rows.map((row) => row.seat_number);
+    const result = await notifications.sendBookingConfirmation(
+      user,
+      concert,
+      seatNumbers,
+      reference,
+    );
+
+    await audit(req, {
+      action: 'CONFIRMATION_RESENT',
+      entityType: 'BOOKING',
+      entityId: reference,
+      metadata: { concert_id: concert.id, seats: seatNumbers, user_id: user.id },
+    });
+
+    res.json({
+      ok: true,
+      reference,
+      seats: seatNumbers,
+      recipient: user.full_name,
+      delivery: result,
+      message: `Confirmation for ${reference} re-sent to ${user.full_name}.`,
+    });
+  }),
+);
+
 router.post(
   '/sections',
   asyncRoute(async (req, res) => {

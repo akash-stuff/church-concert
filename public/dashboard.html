@@ -31,8 +31,15 @@
               Your seats, your WhatsApp status and your details, all in one place.
             </p>
           </div>
-          <figure class="card__art">
-            <img src="/assets/crowd.svg" alt="" aria-hidden="true" width="420" height="240" />
+          <figure class="card__art card__art--crop">
+            <img
+              src="/assets/photos/crucifix-book.jpg"
+              alt=""
+              aria-hidden="true"
+              width="933"
+              height="1400"
+              loading="lazy"
+            />
           </figure>
         </div>
 
@@ -47,6 +54,16 @@
           <div class="card__body" data-booking-body>
             <div class="skeleton skeleton--block"></div>
           </div>
+        </div>
+
+        <!-- Past bookings. Hidden until the fetch finds something, so a new
+             account is not given an empty shelf to look at. -->
+        <div class="card card--flush" data-history-card hidden>
+          <div class="card__head">
+            <h2>Past bookings</h2>
+            <span data-history-pill></span>
+          </div>
+          <div class="card__body" data-history-body></div>
         </div>
 
         <div class="grid grid--2">
@@ -99,18 +116,20 @@
                   <span class="field__error" data-error-for="whatsapp_number"></span>
                 </div>
                 <div class="field">
-                  <label for="address">Address</label>
+                  <label for="address">Address <span class="field__optional">optional</span></label>
                   <span class="field__control">
                     <span class="field__icon" data-icon="home" aria-hidden="true"></span>
-                    <textarea id="address" name="address" required></textarea>
+                    <textarea id="address" name="address"></textarea>
                   </span>
                   <span class="field__error" data-error-for="address"></span>
                 </div>
                 <div class="field">
-                  <label for="emergency_contact">Emergency contact number</label>
+                  <label for="emergency_contact">
+                    Emergency contact number <span class="field__optional">optional</span>
+                  </label>
                   <span class="field__control field__control--inline">
                     <span class="field__icon" data-icon="lifebuoy" aria-hidden="true"></span>
-                    <input id="emergency_contact" name="emergency_contact" type="tel" required />
+                    <input id="emergency_contact" name="emergency_contact" type="tel" />
                   </span>
                   <span class="field__error" data-error-for="emergency_contact"></span>
                 </div>

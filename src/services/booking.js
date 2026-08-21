@@ -573,7 +573,30 @@ async function reassignSeat({ bookingId, newSeatId, adminId, note = null }) {
  * Everything a person currently holds, grouped into parties by reference and
  * ordered by concert date. One row per reference, listing its seats.
  */
-async function getUserBookings(userId, { concertId = null } = {}) {
+/**
+ * Scopes.
+ *
+ *   active    every live booking, whenever the concert is. The default, and
+ *             what the ticket, the seat map and the confirmation screen want:
+ *             a ticket for last month's concert must still resolve.
+ *   upcoming  live bookings for concerts that have not happened yet. What the
+ *             dashboard calls "my bookings".
+ *   past      the ones that are done with — live bookings whose concert has
+ *             been and gone, plus anything cancelled or expired.
+ *
+ * 'past' is deliberately not the complement of 'active': a booking cancelled
+ * for a concert next month belongs in the history, not in the live list.
+ */
+const SCOPES = {
+  active: 'AND b.status IN ' + ACTIVE,
+  upcoming: 'AND b.status IN ' + ACTIVE + ' AND c.event_date >= CURDATE()',
+  past:
+    'AND ((b.status IN ' +
+    ACTIVE +
+    " AND c.event_date < CURDATE()) OR b.status IN ('CANCELLED','EXPIRED'))",
+};
+
+async function getUserBookings(userId, { concertId = null, scope = 'active' } = {}) {
   const params = [userId];
   let filter = '';
   if (concertId) {
@@ -581,8 +604,13 @@ async function getUserBookings(userId, { concertId = null } = {}) {
     params.push(concertId);
   }
 
+  const where = SCOPES[scope] || SCOPES.active;
+  // History reads newest first; everything else counts down to the next date.
+  const order = scope === 'past' ? 'DESC' : 'ASC';
+
   const rows = await db.query(
     `SELECT b.id, b.booking_reference, b.status, b.created_at AS booked_at, b.confirmed_at,
+            b.cancelled_at, b.cancel_reason,
             b.source, b.concert_id,
             b.guest_name, b.guest_email, b.guest_phone, b.guest_age,
             s.id AS seat_id, s.seat_number, sec.name AS section_name,
@@ -592,8 +620,9 @@ async function getUserBookings(userId, { concertId = null } = {}) {
        JOIN seats s ON s.id = b.seat_id
        JOIN sections sec ON sec.id = s.section_id
        JOIN concerts c ON c.id = b.concert_id
-      WHERE b.user_id = ? AND b.status IN ${ACTIVE} ${filter}
-      ORDER BY c.event_date ASC, b.booking_reference ASC, s.display_order ASC, s.seat_number ASC`,
+      WHERE b.user_id = ? ${where} ${filter}
+      ORDER BY c.event_date ${order}, b.booking_reference ASC,
+               s.display_order ASC, s.seat_number ASC`,
     params,
   );
 
@@ -604,6 +633,8 @@ async function getUserBookings(userId, { concertId = null } = {}) {
         booking_reference: row.booking_reference,
         status: row.status,
         booked_at: row.booked_at,
+        cancelled_at: row.cancelled_at,
+        cancel_reason: row.cancel_reason,
         source: row.source,
         concert: {
           id: row.concert_id,
