@@ -8,10 +8,12 @@
  *   svg — for the printable ticket. Vector, so it stays sharp at whatever
  *         resolution the browser prints at. A raster QR at screen resolution
  *         prints soft, and a soft QR is a QR that will not scan.
- *   png — for email. Gmail and Outlook strip inline SVG, so the email version
- *         has to be a raster data URI. Nothing is fetched over the network:
- *         a remote image would be blocked by the CSP on the site and by most
- *         mail clients' image blocking on the way in.
+ *   png — for email, as raw bytes to be attached and referenced by Content-ID.
+ *         Gmail and Outlook strip inline SVG, so mail needs a raster; it also
+ *         has to be an attachment rather than a `data:` URI, because Gmail
+ *         refuses to render those and the QR arrives as a broken box. A remote
+ *         URL is no good either — most clients block third-party images until
+ *         the reader asks, and a QR nobody can see is a QR nobody can scan.
  *
  * What the code contains is a check-in URL, not the bare reference. A steward
  * scanning it with any phone camera lands on the page that tells them whether
@@ -58,19 +60,29 @@ async function ticketSvg(reference, { dark = '#16233d' } = {}) {
   }
 }
 
-/** PNG data URI, for email. */
-async function ticketPng(reference, { width = 320 } = {}) {
+
+/**
+ * The same PNG as raw bytes, for attaching to an email.
+ *
+ * Gmail does not render `data:` image URIs in mail — it strips them — so the
+ * data-URI version above shows as a broken image there. Mail has to carry the
+ * picture as an attachment referenced by Content-ID instead. Kept alongside
+ * There is deliberately no data-URI variant. One existed, it was used for
+ * exactly this, and it is why confirmation emails arrived with a broken image.
+ */
+async function ticketPngBuffer(reference, { width = 320 } = {}) {
   try {
-    return await QRCode.toDataURL(checkInUrl(reference), {
+    return await QRCode.toBuffer(checkInUrl(reference), {
+      type: 'png',
       errorCorrectionLevel: LEVEL,
       margin: 1,
       width,
       color: { dark: '#16233dff', light: '#ffffffff' },
     });
   } catch (error) {
-    console.error('[qr] could not render PNG:', error.message);
+    console.error('[qr] could not render PNG buffer:', error.message);
     return null;
   }
 }
 
-module.exports = { checkInUrl, ticketSvg, ticketPng, LEVEL };
+module.exports = { checkInUrl, ticketSvg, ticketPngBuffer, LEVEL };

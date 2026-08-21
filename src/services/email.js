@@ -91,7 +91,7 @@ function explain(err) {
   return raw.slice(0, 500);
 }
 
-async function sendRaw({ to, subject, text, html }) {
+async function sendRaw({ to, subject, text, html, attachments }) {
   if (env.email.driver === 'mock') {
     console.log(`[email:mock] to ${to} — ${subject}\n${text}\n`);
     return { ok: true, providerMessageId: `mock-${Date.now()}` };
@@ -109,6 +109,7 @@ async function sendRaw({ to, subject, text, html }) {
       subject,
       text,
       html,
+      attachments,
     });
     return { ok: true, providerMessageId: info.messageId || null };
   } catch (err) {
@@ -262,22 +263,36 @@ async function sendPasswordReset({ to, name, link, minutes }) {
   return { ...result, body: text };
 }
 
+/** The Content-ID the QR attachment is referenced by. */
+const QR_CID = 'ticket-qr';
+
 /**
- * The ticket QR, as a PNG data URI.
+ * The ticket QR, referenced as an inline attachment.
  *
- * PNG rather than the SVG the printed ticket uses: Gmail and Outlook strip
- * inline SVG, and a remote <img> would be blocked by most clients' image
- * blocking on the way in. A data URI survives both, and costs about 2 KB.
+ * Not the SVG the printed ticket uses, because Gmail and Outlook strip inline
+ * SVG. Not a `data:` URI either, which is what this used to be and why the QR
+ * arrived broken: Gmail refuses to render data-URI images in mail, so the
+ * recipient saw the alt text and an empty box. Not a remote `<img>` either —
+ * most clients block third-party images until the reader asks for them, and a
+ * QR nobody can see is a QR nobody can scan.
+ *
+ * A Content-ID attachment is the one form all three render without asking. The
+ * bytes travel with the message, so it also works offline and in the porch
+ * where there is no signal.
  */
-const qrBlock = (png, checkIn) =>
-  png
+const qrBlock = (hasQr, checkIn) =>
+  hasQr
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr>
          <td style="padding:16px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;text-align:center;">
-           <img src="${png}" width="150" height="150" alt="QR code for booking ${esc(checkIn)}"
+           <img src="cid:${QR_CID}" width="150" height="150" alt="QR code for booking ${esc(checkIn)}"
                 style="display:block;width:150px;height:150px;image-rendering:pixelated;" />
            <p style="margin:10px 0 0;font-size:11px;color:${MUTED};">Show this at the door</p>
          </td></tr></table>`
     : '';
+
+/** Nodemailer's shape for an inline image, or nothing when the QR failed. */
+const qrAttachment = (buffer) =>
+  buffer ? [{ filename: 'ticket-qr.png', content: buffer, cid: QR_CID, contentType: 'image/png' }] : undefined;
 
 const seatWords = (seatNumber) => {
   const seats = Array.isArray(seatNumber) ? seatNumber : [seatNumber];
@@ -296,12 +311,12 @@ async function sendBookingConfirmation({ to, name, concert, seatNumber, bookingR
     `Booking fee: FREE\n\nShow the reference at the door and arrive 20 minutes early.\n\n` +
     `Your printable ticket, with a QR code: ${ticketUrl}`;
 
-  const [png] = await Promise.all([qr.ticketPng(bookingReference, { width: 300 })]);
+  const qrPng = await qr.ticketPngBuffer(bookingReference, { width: 300 });
 
   const html = layout({
     heading: seats.length === 1 ? 'Your seat is reserved' : `Your ${seats.length} seats are reserved`,
     intro: `Hello ${esc(name)}, show this reference at the door. Everyone in your party comes in under it.`,
-    callout: codeBlock(bookingReference) + qrBlock(png, bookingReference),
+    callout: codeBlock(bookingReference) + qrBlock(Boolean(qrPng), bookingReference),
     body:
       facts(
         [
@@ -314,7 +329,7 @@ async function sendBookingConfirmation({ to, name, concert, seatNumber, bookingR
     footer: 'Arrive 20 minutes early so stewards can seat you without rushing.',
   });
 
-  const result = await sendRaw({ to, subject, text, html });
+  const result = await sendRaw({ to, subject, text, html, attachments: qrAttachment(qrPng) });
   return { ...result, body: text };
 }
 
@@ -348,19 +363,19 @@ async function sendEventReminder({ to, name, concert, seatNumber, bookingReferen
     (concert ? `Venue: ${concert.venue}\n` : '') +
     `\nArrive 20 minutes early and show your reference at the door.`;
 
-  const png = await qr.ticketPng(bookingReference, { width: 300 });
+  const qrPng = await qr.ticketPngBuffer(bookingReference, { width: 300 });
 
   const html = layout({
     heading: `${esc(concert?.name || 'Your concert')} is coming up`,
     intro: `Hello ${esc(name)}, here is your reference again so you have it to hand.`,
-    callout: codeBlock(bookingReference) + qrBlock(png, bookingReference),
+    callout: codeBlock(bookingReference) + qrBlock(Boolean(qrPng), bookingReference),
     body: facts(
       [concert ? ['Venue', concert.venue] : null, [label, list], ['Admission', 'Free']].filter(Boolean),
     ),
     footer: 'Arrive 20 minutes early so stewards can seat you without rushing.',
   });
 
-  const result = await sendRaw({ to, subject, text, html });
+  const result = await sendRaw({ to, subject, text, html, attachments: qrAttachment(qrPng) });
   return { ...result, body: text };
 }
 
